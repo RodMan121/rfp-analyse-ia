@@ -1,0 +1,18 @@
+# Environnement virtuel
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+
+# Configuration sensible (Clé API)
+.env
+.env.example:Zone.Identifier
+
+# Données (PDF, Images, Markdown, Base de données)
+data/
+extract.zip
+
+# Divers
+.DS_Store
+*.log

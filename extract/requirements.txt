@@ -1,0 +1,25 @@
+# ── Gemini API (moteur principal multimodal) ───────
+google-genai==1.38.0
+
+# ── NLP & Classification ────────────────────────────
+spacy==3.7.4
+# Après pip install, lancer : python -m spacy download fr_core_news_md
+
+# ── Embeddings & Vectorstore ───────────────────────
+sentence-transformers==2.7.0
+chromadb==0.5.0
+
+# ── Validation des données ─────────────────────────
+pydantic==2.7.0
+
+# ── Utilitaires ────────────────────────────────────
+python-dotenv==1.0.1
+loguru==0.7.2
+rich==13.7.1
+
+# ── Ce qu'on a SUPPRIMÉ par rapport au Niveau 1 ───
+# PyMuPDF       → remplacé par Gemini vision
+# pdf2image     → remplacé par Gemini vision
+# pytesseract   → remplacé par Gemini OCR natif
+# python-docx   → remplacé par Gemini vision
+# poppler-utils → inutile
