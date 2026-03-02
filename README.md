@@ -1,103 +1,60 @@
-# 🏭 Augmented BID IA — Phase 1 : Ingestion & Analyse RFP
+# 🏭 Augmented BID IA — Moteur de Conformité & Analyse RFP
 
-**Analysez vos appels d'offres localement, gratuitement et en toute confidentialité.**
+Analysez vos appels d'offres localement, avec une précision chirurgicale (GTM & Gap Analysis).
+
+## 🌟 Nouvelles Fonctionnalités (Phase 1 & 2)
+Ce logiciel est passé d'un simple assistant RAG à un **système expert d'audit** :
+
+- **🧠 Recherche Hybride (Vecteurs + BM25)** : Combine l'intelligence sémantique (sens) et la précision textuelle (mots-clés techniques, articles de loi).
+- **🛡️ Gap Analysis Automatisée** : Compare les exigences du client (RFP) avec votre **Catalogue de Services** pour détecter les écarts de conformité.
+- **🏷️ Tagging Sémantique** : Classification automatique des fragments (ADMIN, TECHNIQUE, JURIDIQUE, PLANNING, SÉCURITÉ).
+- **📊 Parsing Tabulaire Haute-Fidélité** : Extraction des tableaux complexes en Markdown pour une analyse précise des prix et délais.
+- **🤖 Agent Expert avec Mémoire** : Se souvient des échanges précédents pour des questions de suivi fluides.
 
 ---
 
-### 🌟 C'est quoi ce projet ?
-Ce logiciel est un assistant intelligent qui "lit" vos documents PDF (appels d'offres, contrats, cahiers des charges) et répond à vos questions en quelques secondes. 
+## 🚀 Flux de Traitement (Pipeline)
+1. **Ingestion (Docling)** : Parsing structurel + Capture PNG des schémas + Cache JSON.
+2. **Double Indexation** : Stockage dans ChromaDB (Vecteurs) + BM25 (Textuel).
+3. **Audit de Conformité** : Extraction des exigences et priorisation (HAUTE/MOYENNE).
+4. **Gap Analysis** : Confrontation avec votre catalogue de savoir-faire.
+5. **Rapport GTM** : Génération d'un tableau de synthèse Markdown (`data/gap_analysis_report.md`).
 
-**Pourquoi l'utiliser ?**
-- **🔒 Privé** : Rien n'est envoyé sur Internet. Vos documents confidentiels restent sur votre PC.
-- **🖼️ Multimodal** : L'IA comprend le texte MAIS aussi les schémas et les maquettes.
-- **💰 Gratuit** : Utilise des modèles d'IA gratuits qui tournent sur votre propre machine.
+---
 
-> [!TIP]
-> 🔰 **Nouveau sur ce projet ?** Lisez notre [Guide Débutant](./GUIDE_DEBUTANT.md) pour comprendre comment ça marche avec des mots simples.
+## 🛠️ Installation & Utilisation
+### Prérequis
+- Python 3.10+, Ollama.
+- Modèles : `qwen2.5:7b` (Texte & Raisonnement), `llama3.2-vision` (Schémas).
 
-### 📊 Flux de Traitement (Pipeline)
+### 1. Indexation
+Indexer l'Appel d'Offres :
+```bash
+./venv/bin/python extract/main.py --input data/input/rfp.pdf --collection rfp_hierarchical
+```
+Indexer votre Catalogue de Services (Référentiel) :
+```bash
+./venv/bin/python extract/main.py --input data/input/catalogue.pdf --collection service_catalog
+```
 
-```mermaid
-graph TD
-    A[📄 Document PDF/DOCX] --> B{🛠️ Docling Parser}
-    B -->|Extraction Sémantique| C[📝 Markdown Hiérarchique]
-    B -->|Snapshots| D[🖼️ Captures PNG des Pages]
-    
-    C --> E[🗄️ ChromaDB - Stockage Vecteurs]
-    
-    F[❓ Question Utilisateur] --> G{🤖 Agent Routeur}
-    G -->|Texte| H[🎯 Reranker + Qwen 2.5]
-    G -->|Schéma/Maquette| I[🖼️ Llama 3.2 Vision]
-    
-    H --> J[🏁 Réponse Expert]
-    I --> J
+### 2. Audit & Gap Analysis (Nouveau !)
+Générer la matrice de conformité et l'analyse d'écart :
+```bash
+./venv/bin/python extract/phase2/compliance.py
+```
+
+### 3. Agent Expert (Q&A)
+Interroger le document (Texte ou Vision) :
+```bash
+./venv/bin/python extract/rfp_agent.py "Quelles sont les clauses de pénalités de retard ?"
 ```
 
 ---
-
-## 🚀 Fonctionnalités Avancées (pour les experts)
-- **Parsing Hiérarchique (Docling)** : Découpage intelligent préservant la structure du document (breadcrumbs, sections).
-- **Reranker Local (Secret Weapon)** : Utilisation de `FlashRank` pour une précision de recherche supérieure au RAG classique.
-- **Routage Intelligent (Ollama)** :
-    - **📝 Raisonnement Texte** : Propulsé par `qwen2.5:7b` pour les analyses juridiques et techniques.
-    - **🖼️ Vision Cognitive** : Bascule automatique vers `llama3.2-vision` pour l'analyse des schémas et maquettes.
-- **Zéro Cloud** : Indexation et raisonnement 100% locaux (Confidentialité totale).
 
 ## 📂 Structure du Projet
+- `extract/phase1/` : Moteur d'ingestion (Parser, VectorStore, Reranker).
+- `extract/phase2/` : Intelligence d'audit (Compliance, Gap Analysis).
+- `data/` : Stockage local (Bases vectorielles, Images, Rapports).
+- `ARCHITECTURE.md` : Détails profonds du fonctionnement hybride.
 
-```text
-.
-├── extract/                 # 核心 Source Code (Le moteur)
-│   ├── phase1/              # Logique métier de traitement
-│   │   ├── local_parser.py  # Extraction structurelle via IBM Docling
-│   │   ├── vectorstore.py   # Gestion de la base ChromaDB (Vecteurs)
-│   │   ├── reranker.py      # Filtre de précision via FlashRank
-│   │   ├── models.py        # Définition des objets de données
-│   │   └── classifier.py    # Classification sémantique (Legacy)
-│   ├── main.py              # Script d'ingestion (Apprend les PDF à l'IA)
-│   ├── rfp_agent.py         # L'Agent Expert (Répond aux questions)
-│   └── split_pdf.py         # Utilitaire pour découper les gros documents
-├── data/                    # Données (Ignoré par Git)
-│   ├── input/               # Vos PDF originaux
-│   ├── output_images/       # Captures PNG des pages (pour la Vision)
-│   ├── output_markdown/     # Versions texte structurées des PDF
-│   └── chroma_db_hierarchical/ # La base de connaissances de l'IA
-├── ARCHITECTURE.md          # Guide technique profond (Flux, RAG, Rerank)
-├── AI_CONTEXT.md            # Mode d'emploi pour les autres IA
-├── GUIDE_DEBUTANT.md        # Comprendre le projet avec des analogies
-├── PROJECT_LOG.md           # État d'avancement et prochaines étapes
-└── README.md                # Ce fichier (Présentation générale)
-```
-
-## 🛠️ Installation
-
-1.  **Prérequis** : Python 3.10+, Ollama.
-2.  **Modèles Ollama requis** :
-    ```bash
-    ollama pull qwen2.5:7b
-    ollama pull llama3.2-vision
-    ```
-3.  **Dépendances** :
-    ```bash
-    pip install -r extract/requirements.txt
-    ```
-
-## 📋 Utilisation
-
-### 📥 Ingestion Hiérarchique
-```bash
-./venv/bin/python extract/main.py --input data/input/votre_document.pdf
-```
-
-### 🧠 Agent Expert (Texte & Vision)
-L'agent détecte automatiquement si vous parlez d'un schéma :
-```bash
-# Analyse textuelle
-./venv/bin/python extract/rfp_agent.py "Quelles sont les pénalités de retard ?"
-
-# Analyse visuelle
-./venv/bin/python extract/rfp_agent.py "Décris-moi le schéma technique de la page 15"
-```
-
-## 🔒 Sécurité
-Les données sensibles (.env, data/, bases vectorielles) sont exclues du dépôt via `.gitignore`.
+🔒 **Sécurité** : 100% Local. Aucune donnée n'est envoyée dans le cloud.

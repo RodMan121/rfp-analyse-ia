@@ -18,12 +18,6 @@ console = Console()
 class RFPAgent:
     """
     Agent Expert en analyse de documents RFP (Request For Proposal).
-    
-    Cet agent implémente un pipeline RAG avancé avec :
-    1. Routage Intentionnel (Texte vs Vision)
-    2. Recherche Sémantique (ChromaDB)
-    3. Reranking de haute précision (FlashRank)
-    4. Génération spécialisée (Qwen pour le texte, Llama3.2-Vision pour les images)
     """
 
     def __init__(self, db_path: str = "data/chroma_db_hierarchical"):
@@ -36,105 +30,116 @@ class RFPAgent:
         self.vision_model = "llama3.2-vision" 
         self.image_dir = Path("data/output_images")
         
+        # MÉMOIRE : Liste de dictionnaires {role: str, content: str}
+        self.history = []
+        
         logger.info(f"🚀 Agent Expert prêt (Texte: {self.text_model} | Vision: {self.vision_model})")
 
-    def _is_vision_request(self, question: str) -> bool:
+    def _route_request(self, question: str) -> str:
         """
-        Analyse sémantique simple pour router vers le modèle Vision.
-        
-        Args:
-            question: La requête utilisateur.
-        Returns:
-            bool: True si la question porte sur un aspect visuel.
+        Routage intelligent via LLM (plus précis que les mots-clés).
         """
-        keywords = ["schéma", "visuel", "maquette", "écran", "interface", "figure", "dessin", "image", "plan"]
-        return any(kw in question.lower() for kw in keywords)
+        router_prompt = f"""Analyse la question utilisateur. Réponds UNIQUEMENT par 'VISION' si la question demande explicitement d'analyser un schéma, une image, un diagramme, un tableau complexe ou un aspect visuel de la page. Sinon, réponds 'TEXT'.
+
+QUESTION : {question}
+MODE :"""
+        try:
+            response = ollama.generate(model=self.text_model, prompt=router_prompt, options={"num_predict": 5})
+            mode = response['response'].strip().upper()
+            return "VISION" if "VISION" in mode else "TEXT"
+        except Exception as e:
+            logger.warning(f"⚠️ Échec du routage LLM ({e}), repli sur mots-clés.")
+            keywords = ["schéma", "visuel", "maquette", "écran", "interface", "figure", "dessin", "image", "plan"]
+            return "VISION" if any(kw in question.lower() for kw in keywords) else "TEXT"
 
     def ask(self, question: str) -> str:
-        """
-        Point d'entrée principal pour interroger le document.
+        """Point d'entrée principal avec mémoire."""
+        mode = self._route_request(question)
         
-        Args:
-            question: La question posée par l'expert métier.
-        Returns:
-            str: La réponse synthétisée par l'IA la plus adaptée.
-        """
-        if self._is_vision_request(question):
-            return self._ask_vision(question)
+        if mode == "VISION":
+            answer = self._ask_vision(question)
         else:
-            return self._ask_text(question)
+            answer = self._ask_text(question)
+            
+        # Mise à jour de l'historique (mémoire courte)
+        self.history.append({"role": "user", "content": question})
+        self.history.append({"role": "assistant", "content": answer})
+        if len(self.history) > 6: self.history = self.history[-6:]
+        
+        return answer
 
     def _ask_text(self, question: str) -> str:
-        """
-        Pipeline de raisonnement textuel (RAG + Reranking).
-        
-        Processus :
-        1. Recherche de 20 candidats dans ChromaDB (Embedding distance).
-        2. Reranking pour sélectionner les 5 fragments les plus pertinents.
-        3. Synthèse par Qwen 2.5 en respectant strictement le contexte.
-        """
+        """Pipeline de raisonnement textuel avec recherche hybride et mémoire."""
         logger.info(f"📝 Intention : Texte | Modèle : {self.text_model}")
         
-        # 1. Retrieval
-        initial_results = self.store.search(query=question, n_results=20)
-        if not initial_results: return "⚠️ Aucun fragment trouvé dans la base de connaissances."
+        # 1. Retrieval (Recherche Hybride : Vecteurs + BM25)
+        initial_results = self.store.search_hybrid(query=question, n_results=20)
+        if not initial_results: return "⚠️ Aucun fragment trouvé."
         
         # 2. Reranking
         best_results = self.reranker.rerank(query=question, documents=initial_results, top_n=5)
         
-        # 3. Augmentation (Context Building)
+        # 3. Context Building
         context_parts = []
         for r in best_results:
-            source_info = f"SOURCE: {r['metadata']['source']} | PAGE: {r['metadata']['page']}\nSECTION: {r['metadata']['breadcrumbs']}"
+            source_info = f"SOURCE: {r['metadata']['breadcrumbs']} (Page {r['metadata']['page']})"
             context_parts.append(f"--- {source_info} ---\n{r['text']}")
         
         context = "\n\n".join(context_parts)
         
-        prompt = f"""Tu es un analyste senior en appels d'offres. Réponds à la question suivante en te basant UNIQUEMENT sur le contexte fourni. 
-Si l'information n'est pas présente, dis-le. Cite toujours la section ou la page.
+        # 4. Prompting Senior (avec Historique)
+        history_str = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in self.history])
+        
+        prompt = f"""Tu es un expert senior en analyse d'Appels d'Offres. Ta mission est de fournir une réponse technique, précise et exhaustive.
 
-CONTEXTE :
+### RÈGLES D'ANALYSE :
+1. Basse-toi UNIQUEMENT sur le CONTEXTE fourni.
+2. CITE TOUJOURS la section et la page.
+3. [IMPORTANT] LECTURE DES TABLEAUX : Si tu vois un bloc [DÉBUT TABLEAU]...[FIN TABLEAU], lis-le colonne par colonne. Ne confonds pas les lignes. Si une cellule est vide, ignore-la.
+4. FORMAT : Utilise du Markdown pour ta réponse. Si la question porte sur des chiffres ou des délais, présente tes conclusions sous forme de tableau si cela améliore la clarté.
+
+### HISTORIQUE :
+{history_str}
+
+### CONTEXTE DU DOCUMENT :
 {context}
 
-QUESTION : {question}
+### QUESTION :
+{question}
 
-RÉPONSE (en Français, professionnelle) :"""
+RÉPONSE (Analyste Senior) :"""
         
-        # 4. Generation
         response = ollama.generate(model=self.text_model, prompt=prompt)
         return response['response']
 
     def _ask_vision(self, question: str) -> str:
-        """
-        Pipeline d'analyse visuelle (Multimodal RAG).
-        
-        Processus :
-        1. Recherche de la page contenant les mots-clés de la question.
-        2. Chargement du snapshot PNG haute résolution correspondant.
-        3. Analyse directe de l'image par Llama 3.2 Vision.
-        """
+        """Pipeline vision multi-candidats avec recherche hybride."""
         logger.info(f"🖼️ Intention : Vision | Modèle : {self.vision_model}")
         
-        # 1. Identification de la page cible via les métadonnées thématiques
-        results = self.store.search(query=question, n_results=3)
-        page_no = results[0]['metadata']['page'] if results else 1
+        # Recherche hybride pour trouver la page (plus précis sur les noms de schémas)
+        results = self.store.search_hybrid(query=question, n_results=3)
+        if not results: return "⚠️ Impossible d'identifier la page visuelle."
         
-        image_path = self.image_dir / f"RFP_page_{page_no}.png"
+        # On essaie d'abord le meilleur résultat
+        page_no = results[0]['metadata']['page']
+        source_stem = Path(results[0]['metadata']['source']).stem
+        image_path = self.image_dir / f"{source_stem}_page_{page_no}.png"
         
         if not image_path.exists():
-            return f"⚠️ La page {page_no} semble pertinente mais la capture visuelle est introuvable."
+            # Essayer de trouver n'importe quel PNG de ce document si le nom exact échoue
+            possible_images = list(self.image_dir.glob(f"{source_stem}_page_*.png"))
+            if possible_images:
+                image_path = sorted(possible_images, key=lambda x: abs(int(x.stem.split('_')[-1]) - page_no))[0]
+            else:
+                return f"⚠️ Capture visuelle introuvable pour la page {page_no} (Doc: {source_stem})."
 
-        logger.info(f"🧠 Analyse visuelle de la page {page_no}...")
+        logger.info(f"🧠 Analyse visuelle de l'image : {image_path.name}")
+        prompt = f"Réponds à cette question d'analyse technique en examinant l'image : {question}. Sois précis sur les éléments graphiques."
         
-        prompt = f"Analyse cette capture d'écran pour répondre à la question suivante : {question}. Décris les éléments visuels, les boutons, les champs ou les flux techniques visibles."
-        
-        # 2. Inférence Multimodale
-        response = ollama.generate(
-            model=self.vision_model,
-            prompt=prompt,
-            images=[str(image_path)]
-        )
-        return f"**(Analyse Multimodale - Page {page_no})**\n\n{response['response']}"
+        response = ollama.generate(model=self.vision_model, prompt=prompt, images=[str(image_path)])
+        return f"**(Analyse Visuelle - Page {page_no})**\n\n{response['response']}"
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Agent RFP Expert Multimodal")
