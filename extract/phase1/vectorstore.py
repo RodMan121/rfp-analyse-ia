@@ -26,7 +26,10 @@ class VectorStore:
             model_name="paraphrase-multilingual-MiniLM-L12-v2"
         )
         
-        self.client = chromadb.PersistentClient(path=db_path)
+        self.client = chromadb.PersistentClient(
+            path=db_path,
+            settings=chromadb.config.Settings(anonymized_telemetry=False)
+        )
         self.collection = self.client.get_or_create_collection(
             name="rfp_hierarchical",
             embedding_function=self.embedding_fn

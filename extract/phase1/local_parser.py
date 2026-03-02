@@ -3,21 +3,13 @@ import pathlib
 import re
 from dataclasses import dataclass
 from loguru import logger
-from docling.document_converter import DocumentConverter
+from docling.document_converter import DocumentConverter, PdfFormatOption
+from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.datamodel.base_models import InputFormat
 
 @dataclass
 class LocalRawFragment:
-    """
-    Structure de données pour un fragment de document enrichi.
-    
-    Attributes:
-        text (str): Le contenu textuel ou Markdown du fragment.
-        section (str): Le titre de la section la plus proche.
-        breadcrumbs (str): Fil d'ariane complet (ex: Introduction > Sécurité).
-        page (int): Numéro de la page d'origine (1-indexed).
-        fragment_type (str): Type de contenu ('text' ou 'table').
-        source_file (str): Nom du fichier source.
-    """
+    """Fragment enrichi pour RAG hiérarchique."""
     text: str
     section: str = "Général"
     breadcrumbs: str = ""
@@ -27,75 +19,68 @@ class LocalRawFragment:
 
 class DoclingParser:
     """
-    Parser local haute performance basé sur IBM Docling.
-    
-    Ce parser transforme des documents complexes (PDF, DOCX) en une structure 
-    hiérarchique. Contrairement à un découpage par nombre de caractères, 
-    il respecte la sémantique du document en identifiant les titres et les tableaux.
+    Parser avancé stable avec capture PNG des pages.
     """
 
-    def __init__(self):
-        """Initialise le convertisseur Docling avec les modèles par défaut."""
-        logger.info("🤖 Initialisation du Parser Hiérarchique (Propriétés Natives)...")
-        self.converter = DocumentConverter()
+    def __init__(self, image_output_dir: str = "data/output_images"):
+        logger.info("🤖 Initialisation du Parser Hiérarchique avec Vision...")
+        
+        # Configuration pour capturer les pages en images
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.generate_page_images = True
+        pipeline_options.images_scale = 2.0
+        
+        self.converter = DocumentConverter(
+            format_options={
+                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+            }
+        )
+        self.image_output_dir = pathlib.Path(image_output_dir)
+        self.image_output_dir.mkdir(parents=True, exist_ok=True)
 
     def parse_to_fragments(self, filepath: str | pathlib.Path) -> list[LocalRawFragment]:
-        """
-        Analyse un document et le découpe en fragments intelligents.
-        
-        Algorithme :
-        1. Conversion du document en objet DoclingDocument.
-        2. Itération sur chaque élément structurel (Titre, Paragraphe, Tableau).
-        3. Maintien d'une pile (stack) de titres pour générer le fil d'ariane.
-        4. Attribution du numéro de page via les métadonnées de provenance.
-        
-        Args:
-            filepath: Chemin vers le fichier à analyser.
-            
-        Returns:
-            list[LocalRawFragment]: Liste des fragments enrichis de métadonnées.
-        """
-        logger.info(f"📄 Analyse structurelle de : {filepath}")
+        """Analyse structurelle + Sauvegarde des images de pages."""
+        logger.info(f"📄 Analyse de : {filepath}")
         result = self.converter.convert(filepath)
         doc = result.document
         source_name = pathlib.Path(filepath).name
         
+        # 1. Sauvegarde des images de pages (pour le mode Vision)
+        doc_stem = pathlib.Path(filepath).stem
+        for page in result.pages:
+            if page.image:
+                image_path = self.image_output_dir / f"{doc_stem}_page_{page.page_no + 1}.png"
+                page.image.save(image_path)
+        
+        logger.success(f"📸 {len(result.pages)} pages capturées en PNG.")
+
+        # 2. Extraction des fragments
         fragments = []
         title_stack = [] 
 
         for item, level in doc.iterate_items():
             label = item.label.lower()
-            
-            # Extraction sécurisée du texte selon le type d'item
             try:
-                item_text = ""
-                if hasattr(item, "text"):
-                    item_text = item.text
-                else:
-                    item_text = item.export_to_markdown() if hasattr(item, "export_to_markdown") else ""
+                item_text = item.text if hasattr(item, "text") else ""
+                if not item_text:
+                    if hasattr(item, "export_to_markdown"):
+                        item_text = item.export_to_markdown()
                 
                 item_text = item_text.strip()
                 if not item_text: continue
-            except Exception as e:
-                logger.debug(f"Saut d'un élément non extractible : {e}")
-                continue
+            except: continue
 
-            # Gestion de la hiérarchie des titres (H1, H2, H3...)
-            # Permet à l'IA de savoir dans quel contexte se trouve un paragraphe
             if "heading" in label or "title" in label or "header" in label:
                 depth = level if level is not None else 0
-                title_stack = title_stack[:depth] # On remonte au niveau parent
-                title_stack.append(item_text)     # On ajoute le titre actuel
+                title_stack = title_stack[:depth]
+                title_stack.append(item_text)
                 continue
 
-            # Filtrage du bruit (fragments trop courts sans valeur sémantique)
             if len(item_text) < 30: continue
 
-            # Construction des métadonnées contextuelles
             breadcrumbs = " > ".join(title_stack) if title_stack else "Racine"
             current_section = title_stack[-1] if title_stack else "Général"
             
-            # Récupération de la page physique dans le PDF
             page_no = 0
             if item.prov and len(item.prov) > 0:
                 page_no = item.prov[0].page_no + 1
@@ -109,5 +94,4 @@ class DoclingParser:
                 fragment_type="table" if "table" in label else "text"
             ))
 
-        logger.success(f"✅ {len(fragments)} fragments hiérarchiques extraits.")
         return fragments

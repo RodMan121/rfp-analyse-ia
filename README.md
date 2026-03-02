@@ -43,6 +43,32 @@ graph TD
     - **🖼️ Vision Cognitive** : Bascule automatique vers `llama3.2-vision` pour l'analyse des schémas et maquettes.
 - **Zéro Cloud** : Indexation et raisonnement 100% locaux (Confidentialité totale).
 
+## 📂 Structure du Projet
+
+```text
+.
+├── extract/                 # 核心 Source Code (Le moteur)
+│   ├── phase1/              # Logique métier de traitement
+│   │   ├── local_parser.py  # Extraction structurelle via IBM Docling
+│   │   ├── vectorstore.py   # Gestion de la base ChromaDB (Vecteurs)
+│   │   ├── reranker.py      # Filtre de précision via FlashRank
+│   │   ├── models.py        # Définition des objets de données
+│   │   └── classifier.py    # Classification sémantique (Legacy)
+│   ├── main.py              # Script d'ingestion (Apprend les PDF à l'IA)
+│   ├── rfp_agent.py         # L'Agent Expert (Répond aux questions)
+│   └── split_pdf.py         # Utilitaire pour découper les gros documents
+├── data/                    # Données (Ignoré par Git)
+│   ├── input/               # Vos PDF originaux
+│   ├── output_images/       # Captures PNG des pages (pour la Vision)
+│   ├── output_markdown/     # Versions texte structurées des PDF
+│   └── chroma_db_hierarchical/ # La base de connaissances de l'IA
+├── ARCHITECTURE.md          # Guide technique profond (Flux, RAG, Rerank)
+├── AI_CONTEXT.md            # Mode d'emploi pour les autres IA
+├── GUIDE_DEBUTANT.md        # Comprendre le projet avec des analogies
+├── PROJECT_LOG.md           # État d'avancement et prochaines étapes
+└── README.md                # Ce fichier (Présentation générale)
+```
+
 ## 🛠️ Installation
 
 1.  **Prérequis** : Python 3.10+, Ollama.

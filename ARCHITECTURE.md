@@ -33,6 +33,21 @@ L'agent RFP agit comme un routeur intelligent :
 - **Reranker** : FlashRank (Local)
 - **LLMs** : Ollama (Local) - Qwen 2.5 & Llama 3.2 Vision
 
+## 🗺️ Répertoire détaillé des composants
+
+### Moteur de Traitement (`extract/phase1/`)
+- **`local_parser.py`** : La porte d'entrée. Il utilise IBM Docling pour comprendre que le document n'est pas qu'une suite de mots, mais une structure (H1, H2, Tableaux). C'est lui qui génère les images PNG pour la vision.
+- **`vectorstore.py`** : Le coffre-fort. Il transforme le texte en vecteurs mathématiques via `sentence-transformers` et les stocke dans ChromaDB. Il gère aussi les métadonnées (page, breadcrumbs).
+- **`reranker.py`** : L'arbitre. Il utilise un modèle Cross-Encoder pour re-noter les résultats de recherche et ne garder que l'excellence.
+- **`models.py`** : Le dictionnaire. Définit les structures de données (`LocalRawFragment`) pour assurer la cohérence entre le parser et la base de données.
+
+### Orchestration & Interface (`extract/`)
+- **`main.py`** : Le chef d'orchestre. Il coordonne le parser et le stockage pour transformer un PDF brut en une base de connaissances prête à l'emploi.
+- **`rfp_agent.py`** : Le cerveau utilisateur. Il reçoit les questions, décide s'il doit "lire" (Texte) ou "regarder" (Vision), et interroge Ollama.
+- **`split_pdf.py`** : L'outil de secours. Utile pour découper des documents trop massifs pour un premier test.
+
+---
+
 ## 🔒 Confidentialité & Coûts
 - **Coûts API** : 0€ (Tout est local).
 - **Données** : Aucune donnée confidentielle (PDF ou base vectorielle) n'est envoyée dans le cloud.
