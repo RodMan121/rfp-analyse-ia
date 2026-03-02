@@ -1,8 +1,23 @@
-# 🏭 Augmented BID IA — Phase 1 : Ingestion & Analyse RFP (Version Expert)
+# 🏭 Augmented BID IA — Phase 1 : Ingestion & Analyse RFP
 
-Solution locale de parsing et d'analyse d'appels d'offres (RFP/CCTP) utilisant une architecture **Multimodale Local-First**.
+**Analysez vos appels d'offres localement, gratuitement et en toute confidentialité.**
 
-## 🚀 Fonctionnalités Avancées
+---
+
+### 🌟 C'est quoi ce projet ?
+Ce logiciel est un assistant intelligent qui "lit" vos documents PDF (appels d'offres, contrats, cahiers des charges) et répond à vos questions en quelques secondes. 
+
+**Pourquoi l'utiliser ?**
+- **🔒 Privé** : Rien n'est envoyé sur Internet. Vos documents confidentiels restent sur votre PC.
+- **🖼️ Multimodal** : L'IA comprend le texte MAIS aussi les schémas et les maquettes.
+- **💰 Gratuit** : Utilise des modèles d'IA gratuits qui tournent sur votre propre machine.
+
+> [!TIP]
+> 🔰 **Nouveau sur ce projet ?** Lisez notre [Guide Débutant](./GUIDE_DEBUTANT.md) pour comprendre comment ça marche avec des mots simples.
+
+---
+
+## 🚀 Fonctionnalités Avancées (pour les experts)
 - **Parsing Hiérarchique (Docling)** : Découpage intelligent préservant la structure du document (breadcrumbs, sections).
 - **Reranker Local (Secret Weapon)** : Utilisation de `FlashRank` pour une précision de recherche supérieure au RAG classique.
 - **Routage Intelligent (Ollama)** :
