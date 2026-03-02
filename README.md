@@ -15,6 +15,24 @@ Ce logiciel est un assistant intelligent qui "lit" vos documents PDF (appels d'o
 > [!TIP]
 > 🔰 **Nouveau sur ce projet ?** Lisez notre [Guide Débutant](./GUIDE_DEBUTANT.md) pour comprendre comment ça marche avec des mots simples.
 
+### 📊 Flux de Traitement (Pipeline)
+
+```mermaid
+graph TD
+    A[📄 Document PDF/DOCX] --> B{🛠️ Docling Parser}
+    B -->|Extraction Sémantique| C[📝 Markdown Hiérarchique]
+    B -->|Snapshots| D[🖼️ Captures PNG des Pages]
+    
+    C --> E[🗄️ ChromaDB - Stockage Vecteurs]
+    
+    F[❓ Question Utilisateur] --> G{🤖 Agent Routeur}
+    G -->|Texte| H[🎯 Reranker + Qwen 2.5]
+    G -->|Schéma/Maquette| I[🖼️ Llama 3.2 Vision]
+    
+    H --> J[🏁 Réponse Expert]
+    I --> J
+```
+
 ---
 
 ## 🚀 Fonctionnalités Avancées (pour les experts)
