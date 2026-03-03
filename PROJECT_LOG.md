@@ -1,19 +1,26 @@
 # 📓 Journal du Projet & État d'Avancement
 
-## ✅ Ce qui a été fait (Phase 1)
-- [x] **Ingestion Hiérarchique** : Docling extrait les sections et le fil d'ariane.
-- [x] **Capture Visuelle** : Snapshot automatique de chaque page en PNG.
-- [x] **Vectorisation** : Stockage dans ChromaDB avec métadonnées complètes.
-- [x] **Reranking** : Intégration de FlashRank pour la précision.
-- [x] **Routage Vision** : Agent capable de basculer vers Llama 3.2 Vision.
-- [x] **Documentation Pro** : Guide débutant, Architecture et Guide IA.
+## ✅ Phase 1 : Ingestion & Analyse (TERMINÉE)
+- [x] **Ingestion Hiérarchique** : Docling + Capture Visuelle.
+- [x] **Double Indexation** : ChromaDB (Vecteurs) + BM25 (Mots-clés).
+- [x] **Recherche Hybride** : Algorithme RRF (Reciprocal Rank Fusion).
+- [x] **Cache de Fragments** : Chargement instantané via `.fragments.json`.
+- [x] **IDs MD5** : Élimination des collisions d'indexation.
 
-## 📍 État Actuel (Session du 02/03/2026)
-- **Base de données** : `data/chroma_db_hierarchical` contient le document `RFP.pdf`.
-- **Modèle de Vision** : Configuré sur `llama3.2-vision`.
-- **Dernier test** : L'agent répond correctement sur les objectifs du projet via Ollama.
+## ✅ Phase 2 : Audit & Conformité (TERMINÉE)
+- [x] **Agent de Conformité** : Extraction automatique des exigences client.
+- [x] **Gap Analysis** : Comparaison avec le catalogue de services.
+- [x] **Rapport de Confiance** : Audit de la qualité d'ingestion (IA Self-Audit).
+- [x] **Prompts Markdown** : Pilotage de l'agent via `data/prompt.md`.
+- [x] **Parallélisation** : Gap Analysis multi-threadée.
 
-## 🚀 Prochaines Étapes suggérées
-1.  **Interface Web** : Créer un petit micro-service FastAPI avec une interface Streamlit pour poser des questions via un navigateur.
-2.  **Analyse de Conformité** : Créer un agent qui compare point par page le RFP avec une réponse type (Phase 2).
-3.  **Export Excel** : Générer automatiquement un tableau de synthèse des exigences à partir des fragments extraits.
+## 🚀 Phase 3 : Interface & Accessibilité (EN COURS)
+- [ ] **Interface Streamlit** : Rendre l'outil utilisable par des non-développeurs.
+- [ ] **Dashboard de Conformité** : Vue d'ensemble graphique des ✅/⚠️/❌.
+- [ ] **Export Excel Pro** : Génération de la matrice GTM au format .xlsx.
+- [ ] **Multi-RFP Compare** : Comparer deux appels d'offres entre eux.
+
+## 🛠️ Maintenance & Dette Technique
+- [x] Migration PyPDF2 -> pypdf (v4).
+- [x] Centralisation config modèles dans `.env`.
+- [x] Logique de retry Gemini (Tenacity).

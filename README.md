@@ -6,18 +6,19 @@ Un système d'analyse d'Appels d'Offres (RFP) **100% local, multimodal** et orie
 
 ## 🌟 Pourquoi utiliser ce logiciel ?
 
-| RAG CLASSIQUE              |   AUGMENTED BID IA
+| FONCTIONNALITÉ              |   BÉNÉFICE MÉTIER
 |---------------------------|----------------------------------
-| "Cherche dans le texte"    |   "Cherche (Vecteurs) + Vérifie (BM25)"
-| "Donne une réponse"        |   "Vérifie la Conformité ✅/⚠️/❌"
-| "Texte uniquement"         |   "Analyse aussi les Schémas & Photos"
-| "Amnésique"                |   "Mémoire de conversation résumée"
+| **Recherche Hybride (RRF)** | Trouve les concepts flous ET les articles de loi exacts.
+| **Gap Analysis Automatique** | Détecte immédiatement vos écarts de conformité ✅/⚠️/❌.
+| **Vision Cognitive**        | Analyse les schémas, maquettes et diagrammes d'architecture.
+| **Audit de Confiance**      | L'IA s'auto-évalue pour garantir la fiabilité des données.
+| **Zéro Cloud (Ollama)**     | Confidentialité totale : vos documents ne sortent pas de votre PC.
 
 ---
 
 ## 🚀 Guide d'Utilisation Rapide
 
-### 1. Indexation (Une seule fois)
+### 1. Indexation (Apprentissage)
 Apprenez à l'IA ce qu'elle doit analyser (le RFP) et ce que vous savez faire (votre catalogue).
 
 ```bash
@@ -28,29 +29,30 @@ Apprenez à l'IA ce qu'elle doit analyser (le RFP) et ce que vous savez faire (v
 ./venv/bin/python extract/main.py --input data/input/notre_savoir_faire.pdf --collection service_catalog
 ```
 
-### 2. Analyse Métier (Gap Analysis)
-Générez la matrice de conformité automatique entre le client et vous.
+### 2. Audit & Gap Analysis
+Générez la matrice de conformité automatique et vérifiez la qualité.
 ```bash
+# Vérifier si l'IA a bien "lu" le document (Rapport de Confiance)
+./venv/bin/python extract/confidence_report.py --rfp "mon_rfp.pdf"
+
+# Lancer la Gap Analysis (Matrice GTM)
 ./venv/bin/python extract/phase2/compliance.py
 ```
-➡️ Rapport disponible dans : `data/gap_analysis_report.md`
 
 ### 3. Dialogue Expert (Méthode Simple ✨)
-C'est la méthode recommandée pour travailler. Plus besoin de taper de longues commandes :
-1.  Éditez le fichier **`data/prompt.md`** (mettez-y votre question complexe).
-2.  Lancez l'agent sans argument :
-```bash
-./venv/bin/python extract/rfp_agent.py
-```
-L'IA lira le fichier Markdown et affichera la réponse formatée dans votre terminal.
+Pour des questions complexes :
+1.  Éditez le fichier **`data/prompt.md`**.
+2.  Lancez l'agent sans argument : `./venv/bin/python extract/rfp_agent.py`
 
 ---
 
-## 📊 Structure Didactique du Code
+## 📂 Structure du Code
 
-- `extract/phase1/` : **Le Bibliothécaire** (Parsing, Chunking, Indexation).
-- `extract/phase2/` : **L'Expert Métier** (Compliance, Gap Analysis).
-- `data/` : **Le Coffre-fort** (Vos documents confidentiels restent ici).
+- `extract/phase1/` : **Le Bibliothécaire** (Parsing Docling/Gemini, Indexation RRF).
+- `extract/phase2/` : **L'Expert Métier** (Compliance, Gap Analysis parallélisée).
+- `data/` : **Le Coffre-fort** (Stockage local, Cache JSON, Images).
 
-🔒 **Sécurité** : 100% Local. Aucune donnée n'est envoyée sur internet.
+---
+
+🔒 **Confidentialité** : Ce système tourne **100% en local**. Rien n'est envoyé sur internet.
 *(Architecture détaillée dans [ARCHITECTURE.md](ARCHITECTURE.md))*

@@ -1,94 +1,46 @@
-# 🏗️ Architecture Technique : Augmented BID IA (V2)
+# 🏗️ Architecture Technique : Augmented BID IA (V2.2)
 
-Ce document explique le fonctionnement interne du moteur d'analyse. Il est conçu pour être lu par des développeurs ou des architectes solutions.
+Ce document détaille le fonctionnement interne du moteur.
 
 ---
 
-## 📊 1. Flux de Données Global (Pipeline)
+## 📊 1. Pipeline d'Extraction Multimodal
 
-Voici comment un document PDF devient une réponse intelligente :
-
-```mermaid
-graph TD
-    A[📄 PDF Brut] --> B[⚙️ Docling Parser]
-    B --> C{🔍 Extraction}
-    C -->|Images| D[🖼️ Captures PNG]
-    C -->|Texte| E[📝 Fragments Markdown]
-    E --> F[🏷️ Tagging Sémantique]
-    F --> G[💾 Cache Fragments .json]
-    G --> H[🗄️ Indexation Double]
-    H --> I[🧠 ChromaDB - Vecteurs]
-    H --> J[🔎 BM25 - Mots-clés]
-```
-
-### Pourquoi ce flux ?
-1.  **Docling** ne se contente pas de lire le texte, il comprend la **hiérarchie** (Titres, Tableaux).
-2.  Le **Tagging Sémantique** classe automatiquement les données (ex: FINANCE, TECHNIQUE) pour que l'IA ne cherche pas une clause juridique dans la partie prix.
-3.  Le **Cache** permet de ne pas re-parser un document déjà analysé (gain de temps > 95%).
+Le système supporte deux moteurs d'extraction :
+1.  **IBM Docling (Local)** : Parsing structurel hiérarchique, idéal pour la confidentialité totale.
+2.  **Gemini 2.0 Flash (Cloud)** : Extraction avancée de schémas PlantUML, diagrammes d'architecture et relations logiques (nécessite une `GOOGLE_API_KEY`).
 
 ---
 
 ## 🧠 2. Recherche Hybride & Fusion RRF
 
-Pour garantir une précision maximale, nous utilisons deux moteurs de recherche en parallèle.
+Pour une précision chirurgicale, nous fusionnons deux index :
+-   **Index Vectoriel (ChromaDB)** : Capture le contexte sémantique (Embeddings multilingual).
+-   **Index Textuel (BM25)** : Capture les termes exacts (Articles, Normes, IDs).
 
-### Le concept de la Fusion (RRF) :
-Si vous cherchez "Article 4.2 sur la sécurité", le moteur vectoriel comprend "sécurité" (sens), mais le moteur BM25 trouve "Article 4.2" (texte exact).
-
-```text
-REQUÊTE UTILISATEUR
-       |
-  ┌────┴────┐
-  ▼         ▼
-[VECTEURS] [BM25]  <-- Deux recherches indépendantes
-  |         |
-  ▼         ▼
-[TOP 20]   [TOP 20] <-- Deux listes de résultats
-  \         /
-   \       /
-    ▼     ▼
- [FUSION RRF]      <-- Calcul d'un score combiné
-      |
-      ▼
- [DÉCISION FINALE] <-- Les 5 meilleurs fragments
-```
-
-**La formule RRF (Reciprocal Rank Fusion)** : `Score = 1 / (60 + Rang_Vecteur) + 1 / (60 + Rang_BM25)`. 
-Cela favorise les documents qui apparaissent en haut des deux listes.
+### Formule RRF (Reciprocal Rank Fusion)
+Nous utilisons l'algorithme standard avec une constante `k=60` :
+`Score(d) = Σ (1 / (k + Rang(d, moteur)))`
+Cela garantit que les documents bien classés dans les *deux* moteurs remontent en priorité.
 
 ---
 
-## 🖼️ 3. Routage Multimodal (Texte vs Vision)
+## 🛡️ 3. Audit & Robustesse
 
-L'agent décide intelligemment quel "sens" utiliser pour répondre.
+### IDs Déterministes
+Pour éviter les doublons lors de ré-indexations, chaque fragment possède un ID généré par un **Hash MD5** du contenu (`source + page + texte`).
 
-```text
-QUESTION : "Explique le schéma page 5"
-       |
-       ▼
-[🧠 ROUTEUR LLM] 
-       |
-       ├─► [INTENTION TEXTE] ──► [Génération Qwen 2.5]
-       └─► [INTENTION VISION] ─┬► [Recherche Page PNG]
-                               └► [Analyse Llama 3.2 Vision]
-```
+### Cache de Fragments
+Le fichier `.fragments.json` stocke le résultat du parsing. Le système vérifie la date de modification (`st_mtime`) du PDF source : si le PDF est plus récent que le cache, le parsing est relancé automatiquement.
 
----
-
-## 🛡️ 4. Gap Analysis (Analyse d'Écart)
-
-C'est le cerveau de la Phase 2. Il compare deux mondes :
-
-| Source A (Client) | Source B (Vous) | Résultat (IA) |
-|:---:|:---:|:---:|
-| **Exigence RFP** | **Votre Catalogue** | **Statut GTM** |
-| "Besoin Support 24/7" | "Support 8h-18h" | ⚠️ PARTIEL |
-| "Hébergement France" | "Data Center Paris" | ✅ CONFORME |
+### Gap Analysis Parallélisée
+L'analyse de conformité utilise un `ThreadPoolExecutor`. Le nombre de threads est piloté par `OLLAMA_NUM_PARALLEL` pour s'adapter à la configuration de votre serveur Ollama.
 
 ---
 
 ## 🛠️ Stack Technique
-- **LLM** : Ollama (Qwen 2.5 / Llama 3.2 Vision)
-- **Vector DB** : ChromaDB
-- **Keywords** : Rank-BM25
-- **Parsing** : IBM Docling
+- **LLM** : Ollama (Qwen 2.5)
+- **Vision** : Llama 3.2 Vision
+- **Vector Store** : ChromaDB
+- **Reranker** : FlashRank
+- **Retry Logic** : Tenacity (Exponentiel)
