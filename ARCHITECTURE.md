@@ -1,6 +1,6 @@
 # 🏗️ Architecture Déterministe : FSM-Driven Engine
 
-Ce document décrit l'organisation de l'Usine à RFP basée sur une Machine à État Finis et une exécution asynchrone haute performance.
+Ce document décrit l'organisation de l'Usine à RFP basée sur une Machine à État Finis, une exécution asynchrone et des capacités multimodales.
 
 ---
 
@@ -9,7 +9,8 @@ Ce document décrit l'organisation de l'Usine à RFP basée sur une Machine à �
 ```mermaid
 graph TD
     subgraph "PHASE 1 : Dissocier"
-        A[📄 Document Brut] -->|Docling| B(🧩 Fragments Atomiques)
+        A[📄 Document Brut] -->|Docling Multimodal| B(🧩 Fragments Texte & Images)
+        B -->|OCR & Extraction PNG| IMG[📸 data/output_images/]
         B -->|Hash MD5| C[(🗄️ Base Immuable)]
     end
     
@@ -19,7 +20,8 @@ graph TD
         FILT -->|Async Dispatcher| SEM{Semaphore}
         SEM -->|Parallel Task 1| LLM1{LLM}
         SEM -->|Parallel Task N| LLM2{LLM}
-        LLM1 & LLM2 -->|Agent BABOK| E{NORMALIZED}
+        LLM1 & LLM2 -->|Agent Vision| VIS[👁️ Image Description]
+        VIS -->|Agent BABOK| E{NORMALIZED}
         E -->|Agent Radar| F{CLEAN}
         F -->|Agent ISO 25010| G{AUDITED}
         G -->|Semantic Deduplicator| DEDUP[Uniqueness Check]
@@ -35,31 +37,31 @@ graph TD
 
 ---
 
-## ⚡ 2. Performance & Gestion des Ressources
+## ⚡ 2. Performance & Capacités Multimodales
 
-L'usine est optimisée pour le traitement industriel de documents volumineux (testée sur +1400 fragments) :
+L'usine est optimisée pour le traitement industriel et la compréhension visuelle :
 
-- **Asynchronisme (asyncio) :** Toutes les phases de traitement LLM sont asynchrones. Le `RequirementHarvester` distribue les tâches en parallèle sans bloquer le thread principal.
-- **Contrôle de Flux (Semaphore) :** Un sémaphore limite le nombre de requêtes simultanées (`MAX_CONCURRENT_REQUESTS`) pour éviter la saturation de la VRAM (GPU) ou les blocages réseau.
-- **Optimisation VRAM :** Pour les configurations locales modestes (4 Go VRAM), le système bride dynamiquement le contexte (`num_ctx: 1024`) et utilise des modèles optimisés comme `llama3.2:3b`.
-- **Auto-Switch Multi-LLM :** Le moteur détecte dynamiquement les clés API (OpenRouter, Gemini) pour basculer de l'inférence locale vers le Cloud, garantissant une flexibilité totale.
+- **Analyse Multimodale :** Le `LocalParser` extrait désormais les schémas et maquettes au format PNG. L'agent `VisionRequirementAgent` utilise des modèles comme Llama 3.2 Vision ou Gemini pour transformer ces images en spécifications textuelles avant leur normalisation BABOK.
+- **Asynchronisme (asyncio) :** Toutes les phases de traitement LLM (Texte & Vision) sont asynchrones.
+- **Contrôle de Flux (Semaphore) :** Un sémaphore limite la concurrence pour protéger la VRAM lors des appels Vision plus gourmands.
+- **Auto-Switch Multi-LLM :** Bascule dynamique entre Ollama, Gemini et OpenRouter.
 
 ---
 
-## 🎨 3. Certification & Produits de Sortie (Output Node)
+## 🎨 3. Certification & Produits de Sortie
 
-La Phase 3 génère deux artefacts certifiés dès que l'état **BASELINE** est atteint :
+La Phase 3 génère deux artefacts certifiés :
 
 ### A. Le Livrable Humain (`technical_baseline_final.md`)
-Un document structuré avec matrice MoSCoW, score d'intégrité et catalogue complet.
+Inclut désormais les exigences issues des schémas et les IDs officiels BN-XXX.
 
 ### B. Le Livrable Machine (`technical_baseline_alm.json`)
-Un fichier JSON structuré pour l'intégration ALM (Jira, DOORS).
+Contient l'historique complet, incluant la trace du passage par l'Agent Vision.
 
 ---
 
 ## 🛠️ 4. Intégrité, Sûreté & Observabilité
 
-- **Project UID :** Hash MD5 global garantissant l'immuabilité de la baseline.
-- **Fail-Safe :** Mécanisme de retry asynchrone avec backoff exponentiel pour les erreurs de quota (429) ou de timeout.
-- **Observabilité :** `factory_logger` centralisé avec système de **buffer mémoire** (flush toutes les 20 entrées) pour maximiser les performances I/O lors des traitements massifs.
+- **Project UID :** Sceau d'immuabilité global.
+- **Dédoublonnage :** Fusion sémantique des fragments pour garantir l'unicité des exigences certifiées.
+- **Observabilité :** `factory_logger` avec buffering mémoire.

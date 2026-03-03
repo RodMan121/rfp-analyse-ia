@@ -9,10 +9,9 @@
 
 ### Phase 2 : Analyse Granulaire & FSM (Traiter)
 - [x] Refonte en architecture Micro-Services autonomes.
-- [x] Implémentation du cycle de vie FSM (`RAW` ➔ `CLEAN`).
-- [x] **Agent BABOK** : Normalisation "Sujet-Action-Objet".
-- [x] **Agent Radar** : Fonction de blocage (score d'ambiguïté).
-- [x] **Agent ISO 25010** : Inférence de complétude.
+- [x] **Usine Multimodale** : Activation de l'Agent Vision (analyse schémas/maquettes).
+- [x] **Filtre Qualité v11** : Élimination du bruit et dédoublonnage sémantique.
+- [x] Implémentation du cycle de vie FSM (`RAW` ➔ `AUDITED`).
 
 ### Phase 3 : Synthèse & Baseline (Associer)
 - [x] Constructeur Matrice MoSCoW.

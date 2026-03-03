@@ -13,8 +13,9 @@ Ce projet n'est pas un système RAG classique, c'est une **Machine à État Fini
 - **Associer (Phase 3)** : Dédoublonnage sémantique obligatoire avant certification. Seules les exigences `CLEAN`, `AUDITED` ou `NORMALIZED` avec identifiant officiel sont éligibles à la baseline.
 
 ## 🛠️ Stack & Standards Techniques
-- **Architecture Asynchrone** : Utilisation systématique de `asyncio` pour les entrées/sorties LLM. Toutes les méthodes `trigger` des agents et les appels LLM doivent être asynchrones (`async`/`await`).
-- **LLM Hybride & Multi-Cloud** : Support natif d'**Ollama**, **Gemini** et **OpenRouter**. Centralisation obligatoire via `_call_llm()` asynchrone avec gestion de retry robuste.
+- **Pipeline Multimodal** : Les images extraites du PDF sont stockées dans `data/output_images/`. Le `FSMAgent` doit supporter le passage d'un `image_path` à `_call_llm()`.
+- **Modèles Vision** : Utiliser en priorité `google/gemini-2.0-flash-001` ou `llama3.2-vision` pour les fragments de type `IMAGE`.
+- **Architecture Asynchrone** : Utilisation systématique de `asyncio`.
 - **Gestion des Ressources** : Utilisation de `Semaphore` pour limiter la concurrence LLM. Bridage du contexte (`num_ctx`) pour l'optimisation VRAM locale.
 - **Data Protection** : Interdiction formelle de muter les dictionnaires source lors du chargement (ex: pas de `pop()` sur les données de registre). Travailler systématiquement sur des copies.
 - **Data Integrity** : `dataclasses` obligatoires pour la manipulation de données.
