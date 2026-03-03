@@ -1,40 +1,45 @@
-# 📖 Guide de l'Usine à RFP : Logique FSM
+# 📖 Manuel de l'Usine : Code et Données
 
-Ce guide explique comment piloter le cycle de vie des exigences dans le système.
-
----
-
-## 🏭 Le Concept : Une Usine à État
-
-Dans ce projet, une exigence n'est pas juste un texte, c'est une entité qui "grandit" à travers des états.
-
-### 🧩 1. États Initiaux (Phase 1)
-- **RAW** : Le texte vient d'être extrait du PDF.
-- **CLASSIFIED** : On sait si c'est du technique, du prix ou de la sécurité.
-
-### ⚙️ 2. Traitement Déterministe (Phase 2)
-- **NORMALIZED** : L'IA a réécrit la phrase en Sujet-Action-Objet.
-- **CLEAN** : L'IA confirme qu'il n'y a plus aucun mot flou (Score = 0). **Attention :** Si le client a écrit "très rapide", l'exigence reste bloquée ici.
-- **AUDITED** : On a vérifié ce qui manquait (ISO 25010).
-
-### 📦 3. Rendu Final (Phase 3)
-- **BASELINE** : L'exigence est intégrée dans le catalogue final du projet.
+Ce guide détaille le rôle de chaque dossier et script pour vous aider à naviguer dans le projet.
 
 ---
 
-## 🚦 Comment débloquer une exigence ?
+## 🧠 1. Le Moteur (`extract/`)
 
-Si vous voyez une exigence bloquée à l'état `NORMALIZED` (Ambiguïté > 0) :
-1.  Consultez le `fuzzy_terms` dans le rapport granulaire.
-2.  Clarifiez le point avec votre client.
-3.  Une fois le texte précis injecté, l'IA validera le passage à l'état `CLEAN`.
+C'est ici que réside toute l'intelligence. Le code est organisé selon les phases de notre méthodologie.
+
+- **`phase1/` (Dissocier)** : 
+    - `local_parser.py` : Le service qui découpe le PDF.
+    - `vectorstore.py` : La gestion du cerveau (similarités et mots-clés).
+    - `reranker.py` : Le filtre de précision.
+- **`phase2/` (Traiter)** :
+    - `micro_agents.py` : La chaîne de montage (BABOK, Loup, ISO).
+    - `compliance.py` : Le moteur de comparaison métier.
+- **`phase3/` (Associer)** :
+    - `composer.py` : Le script qui crée la Technical Baseline et le Reverse TOGAF.
+- **Scripts Racines** :
+    - `main.py` : Le chef d'orchestre pour l'ingestion.
+    - `rfp_agent.py` : L'interface interactive (votre consultant IA).
+    - `granular_audit.py` : Le bouton magique pour traquer les "loups".
 
 ---
 
-## 🚀 Commandes de Contrôle
+## 🗄️ 2. Le Coffre-fort (`data/`)
 
-| Action | Commande | État Cible |
-|---|---|---|
-| **Démarrage** | `python main.py` | RAW ➔ CLASSIFIED |
-| **Audit FSM** | `python granular_audit.py` | ➔ AUDITED |
-| **Génération** | `python phase3/composer.py` | ➔ BASELINE |
+Ce dossier est votre espace de travail local. Il est vital de comprendre que ces fichiers sont **générés pour vous**.
+
+- **`input/`** : Votre bibliothèque de départ. Rien ne se passe si ce dossier est vide.
+- **`output_images/`** : Le stock de "photos" du document. Si vous les supprimez, l'agent ne pourra plus analyser les schémas.
+- **`output_json/`** : Votre accélérateur de vitesse. Il contient les documents déjà "mâchés" par l'IA.
+- **`chroma_db_hierarchical/`** : La base de données finale. C'est ici que l'IA va "piocher" ses réponses.
+
+---
+
+## ⚙️ 3. L'Environnement (`venv/` & `.env`)
+
+- **`venv/`** : Contient toutes les bibliothèques (Docling, Ollama, ChromaDB). Ne modifiez jamais ce dossier manuellement.
+- **`.env`** : Votre panneau de contrôle. C'est ici que vous dites à l'IA quel modèle utiliser (ex: Qwen 2.5) et où sont vos dossiers.
+
+---
+
+🔒 **Auditabilité** : Grâce à cette structure claire, vous pouvez tracer une réponse de l'agent (Phase 3) jusqu'à son fragment d'origine (Phase 1) et voir par quel état FSM elle est passée.
