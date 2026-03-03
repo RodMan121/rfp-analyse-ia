@@ -19,8 +19,10 @@ from utils.factory_log import factory_logger
 
 console = Console()
 
-# FIX P3.9 : Utilisation d'une variable d'environnement pour la concurrence
-MAX_CONCURRENT_REQUESTS = int(os.getenv("FSM_CONCURRENT_REQUESTS", "2"))
+# Configuration dynamique
+OR_KEY = os.getenv("OPENROUTER_API_KEY")
+FSM_CONCURRENT = int(os.getenv("FSM_CONCURRENT_REQUESTS", "2"))
+MAX_CONCURRENT_REQUESTS = 20 if (OR_KEY and len(OR_KEY) > 10) else FSM_CONCURRENT
 
 class RequirementHarvester:
     def __init__(self, db_path: str = "data/chroma_db_hierarchical"):
@@ -29,33 +31,30 @@ class RequirementHarvester:
 
     async def _process_single_fragment(self, doc, meta, fid, semaphore, progress, task):
         async with semaphore:
-            if len(doc) < 40:
-                progress.update(task, advance=1)
-                return None
             try:
                 fsm_data = await self.pipeline.run_factory(doc, uid=fid, metadata=meta)
                 progress.update(task, advance=1)
-                if fsm_data.state != RequirementState.ERROR:
-                    return fsm_data
+                return fsm_data
             except Exception as e:
                 logger.error(f"❌ Erreur fragment {fid}: {e}")
                 progress.update(task, advance=1)
             return None
 
     async def harvest_all(self, collection: str = "rfp_hierarchical"):
-        # FIX P2.5 : Utilisation correcte de la collection passée en paramètre
+        """Moissonnage asynchrone avec déduplication v11."""
+        factory_logger.log_event("HARVEST", "START", "Lancement moissonnage v11.")
+        
         try:
             target_col = self.store.client.get_collection(collection)
             all_fragments = target_col.get()
         except Exception:
-            logger.warning(f"⚠️ Collection {collection} introuvable, usage défaut.")
             all_fragments = self.store.collection.get()
             
         documents = all_fragments.get("documents", [])
         metadatas = all_fragments.get("metadatas", [])
         ids = all_fragments.get("ids", [])
 
-        logger.info(f"🚜 Moissonnage ASYNC de {len(documents)} fragments (Concurrence: {MAX_CONCURRENT_REQUESTS})...")
+        logger.info(f"🚜 Moissonnage ASYNC de {len(documents)} fragments...")
 
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
         
@@ -74,9 +73,25 @@ class RequirementHarvester:
             ]
             results = await asyncio.gather(*jobs)
 
-        fsm_objects = [r for r in results if r is not None]
-        self._save_registry(fsm_objects)
-        logger.success(f"✅ Moissonnage ASYNC terminé : {len(fsm_objects)} exigences en attente.")
+        # --- FIX v11 : DÉDUPLICATION SÉMANTIQUE ---
+        fsm_objects = [r for r in results if r is not None and r.state != RequirementState.ERROR]
+        
+        seen_quotes = {}
+        deduplicated = []
+        for r in fsm_objects:
+            # Normalise la citation pour comparer (ignorer espaces et casse)
+            quote_key = " ".join(r.source_quote.lower().split())[:150]
+            if not quote_key:
+                continue
+            if quote_key in seen_quotes:
+                logger.debug(f"♻️ Doublon éliminé [{r.uid[:8]}] ≈ [{seen_quotes[quote_key][:8]}]")
+                continue
+            seen_quotes[quote_key] = r.uid
+            deduplicated.append(r)
+
+        logger.info(f"🧹 Déduplication : {len(fsm_objects)} → {len(deduplicated)} exigences uniques")
+        self._save_registry(deduplicated)
+        logger.success(f"✅ Moissonnage terminé : {len(deduplicated)} exigences en attente.")
 
     def _save_registry(self, fsm_requirements):
         output_path = Path("data/fsm_registry.json")

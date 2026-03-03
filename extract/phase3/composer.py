@@ -42,7 +42,7 @@ class ArchitectureComposer:
         api_key = os.getenv("GOOGLE_API_KEY")
         
         if or_key and len(or_key) > 10:
-            self.model = model or os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-001")
+            self.model = model or os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct")
             self.client_or = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=or_key)
             self.mode = "OPENROUTER"
         elif api_key and len(api_key) > 10 and "your_google" not in api_key:
@@ -55,7 +55,6 @@ class ArchitectureComposer:
             self.async_ollama = ollama.AsyncClient()
 
     async def _call_llm(self, prompt: str, format: str = "json") -> Dict:
-        """FIX P2.7 : Unification du mécanisme de retry."""
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -64,7 +63,7 @@ class ArchitectureComposer:
                         model=self.model,
                         messages=[{"role": "user", "content": prompt}],
                         response_format={"type": "json_object"} if format == "json" else None,
-                        timeout=30.0
+                        timeout=40.0
                     )
                     return {"response": response.choices[0].message.content}
                 elif self.mode == "GEMINI":
@@ -75,8 +74,7 @@ class ArchitectureComposer:
                     response = await self.async_ollama.generate(model=self.model, prompt=prompt, format=format if format == "json" else None, options={"num_ctx": 2048, "temperature": 0.1})
                     return {"response": response.get("response", "{}")}
             except Exception as e:
-                delay = 5 * (attempt + 1) if "429" in str(e) else 2 * (attempt + 1)
-                await asyncio.sleep(delay)
+                await asyncio.sleep(5 * (attempt + 1))
         return {"response": "{}"}
 
     def _clean_json(self, raw_resp: str) -> Dict:
@@ -93,7 +91,6 @@ class ArchitectureComposer:
         with open(path, "r", encoding="utf-8") as f: data = json.load(f)
         reqs = []
         for d in data:
-            # FIX P2.4 : Ne pas muter le dict original avec pop()
             d_copy = {k: v for k, v in d.items() if k != "state"}
             r = FSMRequirement(**d_copy)
             r.state = RequirementState(d["state"])
@@ -101,24 +98,38 @@ class ArchitectureComposer:
         return reqs
 
     async def assemble_baseline(self, audited_requirements: List[FSMRequirement]) -> TechnicalBaseline:
-        # On accepte CLEAN, NORMALIZED et AUDITED (nouvel état v9)
-        final_set = [r for r in audited_requirements if r.state in [RequirementState.CLEAN, RequirementState.NORMALIZED, RequirementState.AUDITED] and len(r.source_quote) > 5]
-        
-        # FIX P2.6 : Log explicite en cas d'absence d'exigences
+        # --- FIX v11 : FILTRAGE STRICT BASELINE ---
+        final_set = []
+        for r in audited_requirements:
+            if r.state == RequirementState.ERROR: continue
+            if len(r.source_quote) <= 10: continue
+            
+            # NORMALIZED accepté uniquement si id officiel présent (BN-XXX)
+            if r.state == RequirementState.NORMALIZED:
+                if not r.metadata.get("official_id"):
+                    continue
+            
+            if r.state in [RequirementState.CLEAN, RequirementState.AUDITED, RequirementState.NORMALIZED]:
+                final_set.append(r)
+
         if not final_set:
-            logger.error("🚫 Échec certification : Aucune exigence validée (CLEAN/NORMALIZED/AUDITED) trouvée.")
+            logger.error("🚫 Échec : Aucune exigence qualifiée trouvée pour la Baseline.")
             return None
+
+        logger.info(f"📐 Baseline : {len(final_set)} exigences certifiées.")
 
         # 1. MoSCoW
         moscow_data = {"Must": [], "Should": [], "Could": [], "Won't": []}
         batch_size = 10
-        for i in range(0, min(len(final_set), 50), batch_size):
+        for i in range(0, min(len(final_set), 100), batch_size):
             batch = final_set[i:i+batch_size]
             partial_moscow = await self._construct_moscow(batch)
             for key in moscow_data:
-                moscow_data[key].extend(partial_moscow.get(key, []))
+                items = partial_moscow.get(key, [])
+                cleaned_items = [it["text"] if isinstance(it, dict) else it for it in items]
+                moscow_data[key].extend(cleaned_items)
 
-        # 2. Scoring d'intégrité
+        # 2. Scoring
         integrity_data = await self._scoring_integrity(moscow_data)
 
         serializable_reqs = []
@@ -139,12 +150,12 @@ class ArchitectureComposer:
         )
         self._export_json(baseline)
         self._export_markdown(baseline)
-        logger.success(f"📦 Baseline {baseline.project_uid} certifiée avec succès.")
         return baseline
 
     def _export_json(self, baseline: TechnicalBaseline):
         output_path = Path("data/technical_baseline_alm.json")
-        with open(output_path, "w", encoding="utf-8") as f: json.dump(asdict(baseline), f, indent=2, ensure_ascii=False)
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(asdict(baseline), f, indent=2, ensure_ascii=False)
 
     def _export_markdown(self, baseline: TechnicalBaseline):
         output_path = Path("data/technical_baseline_final.md")
@@ -152,35 +163,41 @@ class ArchitectureComposer:
         md += f"**Date de certification :** {baseline.timestamp}\n"
         md += f"**Nombre d'exigences certifiées :** {baseline.requirements_count}\n"
         md += f"**Score d'intégrité système :** {baseline.integrity_score}/5\n\n"
+
         md += "## 🎯 Matrice de Priorisation (MoSCoW)\n\n"
         for prio in ["Must", "Should", "Could", "Won't"]:
             md += f"### {prio}\n"
             reqs = baseline.moscow_matrix.get(prio, [])
             if not reqs: md += "_Aucune exigence._\n"
             else:
-                for r in reqs:
-                    text = r.get("exigence", r) if isinstance(r, dict) else r
-                    md += f"- {text}\n"
+                for r in reqs: md += f"- {r}\n"
             md += "\n"
+
         md += "## 📋 Catalogue des Exigences Certifiées\n\n"
-        md += "| UID | Structure BABOK | Citation Source | Page / Section | Historique FSM |\n"
-        md += "|:---:|---|---|---|---|\n"
+        md += "| ID Officiel | Structure BABOK | Citation Source | Page | Historique FSM |\n"
+        md += "|:---:|---|---|:---:|---|\n"
+
         for r in baseline.validated_requirements:
             hist = " ➔ ".join([h.split(" (")[0] for h in r["state_history"]])
+            official_id = r["metadata"].get("official_id", "")
+            display_id = f"**{official_id}**" if official_id else r["uid"][:8]
+            
             babok = f"**{r.get('subject', '?')}** {r.get('action', '?')} {r.get('target_object', '?')}"
             quote = f"« {r.get('source_quote', 'N/A')} »"
-            meta = f"P.{r['metadata'].get('page', '?')} ({r['metadata'].get('breadcrumbs', '?')})"
-            md += f"| {r['uid'][:8]} | {babok} | {quote} | {meta} | {hist} |\n"
-        with open(output_path, "w", encoding="utf-8") as f: f.write(md)
+            page = r["metadata"].get("page", "?")
+            md += f"| {display_id} | {babok} | {quote} | P.{page} | {hist} |\n"
+
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(md)
 
     async def _construct_moscow(self, batch: List[FSMRequirement]) -> Dict:
-        req_texts = [{"id": r.uid[:5], "text": r.source_quote} for r in batch]
-        prompt = f"Expert MoSCoW: Classe ces exigences techniques en JSON (Must, Should, Could, Won't) : {json.dumps(req_texts)}"
+        req_texts = [{"id": r.metadata.get("official_id", r.uid[:5]), "text": r.source_quote} for r in batch]
+        prompt = f"Expert MoSCoW: Classe ces exigences techniques en JSON (Must, Should, Could, Won't). Réponds uniquement avec le texte de l'exigence dans les listes. JSON : {json.dumps(req_texts)}"
         resp = await self._call_llm(prompt=prompt, format="json")
         return self._clean_json(resp.get("response", "{}"))
 
     async def _scoring_integrity(self, matrix_data: Dict) -> Dict:
-        prompt = f"Expert TOGAF: Analyse la cohérence de cette matrice et donne un score (1-5) JSON : {json.dumps(matrix_data)}"
+        prompt = f"Expert TOGAF: Score l'intégrité (1-5) JSON : {json.dumps(matrix_data)}"
         resp = await self._call_llm(prompt=prompt, format="json")
         return self._clean_json(resp.get("response", "{}"))
 

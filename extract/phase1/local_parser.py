@@ -1,199 +1,108 @@
 import os
-import pathlib
+import re
 import hashlib
-import unicodedata
-from abc import ABC, abstractmethod
-from typing import List, Dict, Any
-from dataclasses import dataclass
+from pathlib import Path
 from loguru import logger
-from docling.document_converter import DocumentConverter, PdfFormatOption
-from docling.datamodel.pipeline_options import PdfPipelineOptions
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass
 from docling.datamodel.base_models import InputFormat
-from dotenv import load_dotenv
+from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.document_converter import DocumentConverter, PdfFormatOption
 
-load_dotenv(pathlib.Path(__file__).parent.parent / ".env")
-
+# FIX v11 : Filtres de bruit structurels
+_NOISE_PATTERNS = re.compile(
+    r"if printed,?\s*make sure"
+    r"|this document contains confidential"
+    r"|essp-rd-\d+\s+iss\."
+    r"|page \d+\s+of\s+\d+"
+    r"|figure \d+\s*:"
+    r"|this signature sheet was generated"
+    r"|document creation"
+    r"|document's signature sheet"
+    r"|applicable version"
+    r"|this chapter must be quoted",
+    re.IGNORECASE
+)
+_MIN_CONTENT_LENGTH = 80
 
 @dataclass
 class AtomicDecomposition:
-    """Représente un fragment d'information immuable et structuré."""
-
     content: str
     id_hash: str
     metadata: Dict[str, Any]
     category: str = "GENERAL"
 
-
-class DecomposerService(ABC):
-    """Interface pour les services de dissociation."""
-
-    @abstractmethod
-    def decompose(self, source: Any) -> List[AtomicDecomposition]:
-        pass
-
-
-class DoclingDecomposer(DecomposerService):
-    """Implémentation du service de décomposition via IBM Docling avec hiérarchie."""
+class LocalParser:
+    """Analyseur local utilisant Docling avec filtrage de bruit v11."""
 
     def __init__(self):
-        self.image_dir = pathlib.Path(
-            os.getenv("OUTPUT_IMAGE_DIR", "data/output_images")
-        )
-        self.cache_dir = pathlib.Path(os.getenv("OUTPUT_JSON_DIR", "data/output_json"))
-        self.converter = self._init_converter()
-
-        self.categories = {
-            "ADMIN": [
-                "administratif",
-                "candidature",
-                "justificatif",
-                "éligibilité",
-                "assurance",
-                "attestation",
-                "agrément",
-            ],
-            "TECHNIQUE": [
-                "spécification",
-                "besoin",
-                "exigence",
-                "fonctionnement",
-                "architecture",
-                "technique",
-                "solution",
-                "logiciel",
-                "matériel",
-                "infrastructure",
-            ],
-            "FINANCIER": [
-                "prix",
-                "coût",
-                "facturation",
-                "budget",
-                "montant",
-                "paiement",
-                "pénalité",
-                "unitaire",
-                "forfait",
-                "devis",
-            ],
-            "JURIDIQUE": [
-                "clause",
-                "contrat",
-                "litige",
-                "résiliation",
-                "droit",
-                "propriété",
-                "juridique",
-                "responsabilité",
-                "loi",
-            ],
-            "PLANNING": [
-                "délai",
-                "calendrier",
-                "jalon",
-                "livraison",
-                "durée",
-                "planning",
-                "mise en service",
-            ],
-            "SECURITE": [
-                "iso",
-                "sécurité",
-                "rgpd",
-                "données",
-                "confidentialité",
-                "protection",
-                "habilité",
-                "authentification",
-                "chiffrement",
-            ],
-        }
-
-    def _init_converter(self):
-        opts = PdfPipelineOptions()
-        opts.generate_page_images = True
-        opts.do_ocr = True
-        return DocumentConverter(
-            allowed_formats=[InputFormat.PDF],
-            format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)},
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.do_ocr = True
+        pipeline_options.do_table_structure = True
+        self.converter = DocumentConverter(
+            format_options={
+                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+            }
         )
 
-    def _strip_accents(self, s):
-        return "".join(
-            c
-            for c in unicodedata.normalize("NFD", s)
-            if unicodedata.category(c) != "Mn"
-        )
+    def _generate_id(self, text: str, metadata: Dict) -> str:
+        anchor = f"{text[:100]}-{metadata.get('page', 0)}"
+        return hashlib.md5(anchor.encode()).hexdigest()
 
-    def _get_semantic_category(self, text: str, breadcrumbs: str) -> str:
-        context = self._strip_accents((text + " " + breadcrumbs).lower())
-        scores = {cat: 0 for cat in self.categories}
-        for cat, keywords in self.categories.items():
-            for kw in keywords:
-                kw_clean = self._strip_accents(kw.lower())
-                if kw_clean in context:
-                    scores[cat] += len(kw_clean)
-        best_cat = max(scores, key=scores.get)
-        return best_cat if scores[best_cat] > 0 else "GENERAL"
-
-    def _generate_id(self, text: str, meta: Dict) -> str:
-        seed = f"{meta.get('source')}_{meta.get('page')}_{text[:100]}"
-        return hashlib.md5(seed.encode()).hexdigest()
-
-    def decompose(self, filepath: str | pathlib.Path) -> List[AtomicDecomposition]:
-        filepath = pathlib.Path(filepath)
-        source_name = filepath.name
-
-        logger.info(f"📄 Décomposition structurelle de : {source_name}")
-        result = self.converter.convert(filepath)
+    def decompose(self, pdf_path: str) -> List[AtomicDecomposition]:
+        logger.info(f"📄 Décomposition structurelle de : {Path(pdf_path).name}")
+        result = self.converter.convert(pdf_path)
         doc = result.document
-
+        
         decompositions = []
         title_stack = []
 
-        for item, level in doc.iterate_items():
+        for item, level in doc.iterate_sections():
             label = item.label.lower()
             try:
                 raw_text = item.text if hasattr(item, "text") else ""
-                if not raw_text or len(raw_text.strip()) < 10:
+                
+                # --- FIX v11 : Filtrage de bruit ---
+                text_clean = raw_text.strip()
+                if len(text_clean) < _MIN_CONTENT_LENGTH:
                     continue
+                if _NOISE_PATTERNS.search(text_clean):
+                    logger.debug(f"🗑️ Bruit filtré: {text_clean[:60]}...")
+                    continue
+                # ------------------------------------
+
             except Exception:
                 continue
 
             if "heading" in label or "title" in label:
                 depth = level if level is not None else 0
                 title_stack = title_stack[:depth]
-                title_stack.append(raw_text)
+                title_stack.append(text_clean)
                 continue
 
-            breadcrumbs = " > ".join(title_stack) if title_stack else "Racine"
-            category = self._get_semantic_category(raw_text, breadcrumbs)
-            page_no = item.prov[0].page_no + 1 if item.prov else 1
+            category = "GENERAL"
+            text_lower = text_clean.lower()
+            if any(k in text_lower for k in ["doit", "doivent", "shall", "must", "should"]):
+                category = "REQUIREMENT"
+            if any(k in text_lower for k in ["sécurité", "security", "accès", "authentification"]):
+                category = "SECURITE"
+            if any(k in text_lower for k in ["performance", "ms", "seconde", "charge"]):
+                category = "TECHNIQUE"
 
             meta = {
-                "source": source_name,
-                "page": page_no,
-                "breadcrumbs": breadcrumbs,
-                "section": title_stack[-1] if title_stack else "Général",
+                "source": Path(pdf_path).name,
+                "page": item.prov[0].page_no if item.prov else 0,
+                "breadcrumbs": " > ".join(title_stack) if title_stack else "Racine"
             }
 
             decompositions.append(
                 AtomicDecomposition(
-                    content=raw_text,
-                    id_hash=self._generate_id(raw_text, meta),
+                    content=text_clean,
+                    id_hash=self._generate_id(text_clean, meta),
                     metadata=meta,
                     category=category,
                 )
             )
 
-        # Sauvegarde des images de pages
-        for page in result.pages:
-            if page.image:
-                img_path = (
-                    self.image_dir / f"{filepath.stem}_page_{page.page_no + 1}.png"
-                )
-                if not img_path.exists():
-                    page.image.save(img_path)
-
-        logger.success(f"✅ {len(decompositions)} fragments atomiques extraits.")
+        logger.success(f"✅ {len(decompositions)} fragments utiles extraits.")
         return decompositions

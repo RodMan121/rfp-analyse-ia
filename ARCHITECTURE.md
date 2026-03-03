@@ -15,12 +15,14 @@ graph TD
     
     subgraph "PHASE 2 : Traiter (FSM Async)"
         C -->|Requirement Harvester| D[Industrial Scanning]
-        D -->|Async Dispatcher| SEM{Semaphore}
+        D -->|Structural Noise Filter| FILT{Regex & LLM}
+        FILT -->|Async Dispatcher| SEM{Semaphore}
         SEM -->|Parallel Task 1| LLM1{LLM}
         SEM -->|Parallel Task N| LLM2{LLM}
         LLM1 & LLM2 -->|Agent BABOK| E{NORMALIZED}
         E -->|Agent Radar| F{CLEAN}
         F -->|Agent ISO 25010| G{AUDITED}
+        G -->|Semantic Deduplicator| DEDUP[Uniqueness Check]
         F -.->|Score > 0| H[🚩 STALLED]
     end
     

@@ -1,15 +1,18 @@
 import json
 import datetime
 import os
+import atexit
 from pathlib import Path
 
 class ProductionLogger:
-    """Système de log industriel optimisé pour les gros volumes."""
+    """Système de log industriel optimisé pour les gros volumes avec flush automatique."""
     def __init__(self, log_file: str = "data/factory_production.json"):
         self.log_path = Path(log_file)
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self._buffer = []
-        self._buffer_limit = 20 # FIX P3.8 : Accumulation en mémoire
+        self._buffer_limit = 20
+        # FIX P3.5 : Flush automatique à la fin du programme
+        atexit.register(self.flush)
 
     def log_event(self, phase: str, status: str, message: str, details: dict = None):
         log_entry = {
@@ -21,7 +24,6 @@ class ProductionLogger:
         }
         self._buffer.append(log_entry)
         
-        # Flush si on dépasse la limite ou si c'est une erreur critique
         if len(self._buffer) >= self._buffer_limit or status == "ERROR":
             self.flush()
 

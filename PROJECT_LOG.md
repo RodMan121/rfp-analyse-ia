@@ -23,11 +23,11 @@
 ### 🛠️ Maintenance & Qualité (Ingénierie)
 - [x] Audit Qualité complet (Mars 2026).
 - [x] Migration vers standard PEP8 avec `Ruff`.
-- [x] **Audit v9** : Remise à niveau complète (appel async, protection mutation dict, correction fuzzy_terms).
+- [x] **Audit v11** : Remise à niveau industrielle (Filtre anti-bruit regex, ancrage BN-XXX, dédoublonnage sémantique).
 - [x] **Refonte Asynchrone (asyncio)** : Pipeline complet (`harvester` & `composer`) en mode asynchrone pour la performance.
 - [x] **Optimisation VRAM** : Pilotage du contexte (`num_ctx`) et de la concurrence pour GPU 4 Go.
 - [x] **Support Multi-Cloud** : Intégration hybride **Ollama / Gemini / OpenRouter**.
-- [x] **Système de Logs** : Buffering mémoire pour les traitements massifs.
+- [x] **Système de Logs** : Buffering mémoire et flush automatique à la sortie.
 - [x] Système de logs centralisé (`factory_log.py`).
 
 ## 🚀 Prochaines étapes (Backlog)
