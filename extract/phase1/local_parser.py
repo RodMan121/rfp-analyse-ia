@@ -119,7 +119,9 @@ class DoclingParser:
                     raw_text = f"\n[TABLEAU]\n{item.export_to_markdown()}\n[/TABLEAU]\n" if hasattr(item, "export_to_markdown") else item.text
                 else: raw_text = item.text if hasattr(item, "text") else ""
                 if not raw_text or len(raw_text.strip()) < 5: continue
-            except Exception as e: logger.debug(f"⚠️ Fragment sauté : {e}"); continue
+            except Exception as e:
+                logger.debug(f"⚠️ Fragment sauté : {e}")
+                continue
 
             if "heading" in label or "title" in label or "header" in label:
                 depth = level if level is not None else 0

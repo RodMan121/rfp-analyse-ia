@@ -18,6 +18,8 @@ load_dotenv(Path(__file__).parent / ".env")
 CATEGORIES = ["ADMIN", "TECHNIQUE", "FINANCIER", "JURIDIQUE", "PLANNING", "SECURITE"]
 TEXT_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "qwen2.5:7b")
 VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "llama3.2-vision")
+DEFAULT_DB = os.getenv("CHROMA_DB_PATH", "data/chroma_db_hierarchical")
+DEFAULT_IMAGES = os.getenv("OUTPUT_IMAGE_DIR", "data/output_images")
 
 def audit_ingestion(store: VectorStore, image_dir: Path) -> dict:
     """Analyse la qualité de l'ingestion par catégorie."""
@@ -43,7 +45,6 @@ def audit_ingestion(store: VectorStore, image_dir: Path) -> dict:
 
         try:
             response = ollama.generate(model=TEXT_MODEL, prompt=prompt, format="json")
-            # Correction audit : utilisation de .get()
             data = json.loads(response.get('response', '{}'))
             data["nom"] = cat; data["nb_fragments"] = len(fragments)
             rapport["categories"].append(data)
@@ -119,9 +120,9 @@ def generate_markdown_report(ingestion: dict, gap: list, rfp_name: str) -> str:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(); parser.add_argument("--rfp", required=True); args = parser.parse_args()
-    rfp_s = VectorStore(db_path="data/chroma_db_hierarchical", collection_name="rfp_hierarchical")
-    cat_s = VectorStore(db_path="data/chroma_db_hierarchical", collection_name="service_catalog")
-    ing = audit_ingestion(rfp_s, Path("data/output_images"))
+    rfp_s = VectorStore(db_path=DEFAULT_DB, collection_name="rfp_hierarchical")
+    cat_s = VectorStore(db_path=DEFAULT_DB, collection_name="service_catalog")
+    ing = audit_ingestion(rfp_s, Path(DEFAULT_IMAGES))
     gap = audit_gap_analysis(rfp_s, cat_s)
     with open("data/confidence_report.md", "w", encoding="utf-8") as f: f.write(generate_markdown_report(ing, gap, args.rfp))
     logger.success("✅ Rapport généré.")

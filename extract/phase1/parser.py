@@ -10,7 +10,8 @@ from google.genai import types
 from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-load_dotenv()
+# Config robuste
+load_dotenv(pathlib.Path(__file__).parent.parent / ".env")
 
 EXTRACTION_PROMPT = """Tu es un expert Business Analyst spécialisé dans l'analyse d'appels d'offres (RFP/CCTP).
 Analyse ce document et retourne UNIQUEMENT un objet JSON :
