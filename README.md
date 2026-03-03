@@ -4,58 +4,38 @@
 
 ---
 
-## 📂 Arborescence du Projet
-
-Voici l'organisation de votre usine IA :
-
-```text
-.
-├── 📂 extract/              # 🧠 LE MOTEUR (Code Source)
-│   ├── phase1/              # Dissociation : Ingestion & Indexation
-│   ├── phase2/              # Traitement : Micro-Agents & FSM
-│   ├── phase3/              # Association : Synthèse & Baseline
-│   ├── main.py              # Point d'entrée de l'usine
-│   ├── rfp_agent.py         # L'Agent expert (Q&A)
-│   ├── granular_audit.py    # Script d'audit stratégique
-│   └── split_pdf.py         # Utilitaire pour les gros documents
-│
-├── 📂 data/                 # 🗄️ LE COFFRE-FORT (Données Locales)
-│   ├── input/               # Vos PDF originaux (RFP, catalogues)
-│   ├── output_images/       # Captures PNG des pages (Preuves Vision)
-│   ├── output_json/         # Cache technique des fragments
-│   ├── chroma_db_hierarchical/ # Base de données vectorielle immuable
-│   ├── prompt.md            # Votre fichier de questions complexes
-│   ├── gap_analysis_report.md  # Rapport final de conformité
-│   └── granular_audit_report.md # Rapport final technique (loups)
-│
-├── 📂 venv/                 # ⚙️ L'ENVIRONNEMENT (Python)
-├── ARCHITECTURE.md          # Guide technique profond
-├── GUIDE_COMPLET.md         # Manuel opérationnel des flux
-└── README.md                # Cette présentation
-```
-
----
-
 ## 🗺️ Cartographie des Flux
 
 ### 📥 Entrées (Inputs)
-- **`data/input/`** : Déposez ici vos PDF.
-- **`data/prompt.md`** : Écrivez vos questions ici.
+- **`data/input/`** : Vos documents sources (RFP, CCTP, Catalogues). C'est l'unique matière première.
 
 ### 📤 Sorties (Outputs)
-- **`data/granular_audit_report.md`** : Liste les ambiguïtés et les manques du client.
-- **`data/gap_analysis_report.md`** : Matrice GTM montrant votre conformité.
-- **`data/output_images/`** : Preuves visuelles utilisées par l'IA Vision.
+- **`data/granular_audit_report.md`** : Liste les ambiguïtés et les manques du client (Phase 2).
+- **`data/gap_analysis_report.md`** : Matrice GTM montrant votre conformité (Phase 3).
+- **`data/output_images/`** : Preuves visuelles utilisées par l'IA Vision pour l'audit.
 
 ---
 
-## 🚀 Guide d'Utilisation Rapide
+## 🚀 Guide d'Utilisation Automatisé
 
-1.  **Dissocier** : `python extract/main.py --input data/input/mon_rfp.pdf`
-2.  **Traiter** : `python extract/granular_audit.py`
-3.  **Associer** : `python extract/phase3/composer.py`
+1.  **Dissocier (Phase 1)** : Apprenez le document à l'IA.
+    ```bash
+    ./venv/bin/python extract/main.py --input data/input/mon_rfp.pdf
+    ```
+2.  **Traiter (Phase 2 ✨)** : Lancez l'audit automatique via les Micro-Agents (BABOK, Loup, ISO).
+    ```bash
+    ./venv/bin/python extract/granular_audit.py
+    ```
+3.  **Associer (Phase 3)** : Générez la Technical Baseline et le Reverse TOGAF.
+    ```bash
+    ./venv/bin/python extract/phase3/composer.py
+    ```
 
 ---
 
-🔒 **Confidentialité** : Le dossier `data/` est exclu de Git via `.gitignore`. Vos documents confidentiels restent chez vous.
+💡 **Besoin d'investigation ?** Utilisez l'agent interactif pour poser des questions spécifiques sur un point bloqué : `./venv/bin/python extract/rfp_agent.py "Pourquoi l'exigence X est bloquée ?"`
+
+---
+
+🔒 **Confidentialité** : Système 100% local. Vos documents ne quittent jamais votre machine.
 *(Détails techniques dans [ARCHITECTURE.md](ARCHITECTURE.md))*
