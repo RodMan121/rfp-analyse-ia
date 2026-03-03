@@ -1,33 +1,41 @@
-# 🔰 Guide Débutant : Vos 3 Experts IA
+# 🔰 Guide Débutant : La Méthode Augmented BID
 
-Bienvenue ! Ce guide vous explique comment l'IA analyse vos documents comme une véritable équipe d'ingénieurs.
+Bienvenue ! Ce guide vous explique comment l'IA transforme un document complexe en une liste de tâches précises en deux étapes : **Dissocier** et **Traiter**.
 
 ---
 
-## 1. La "Chaîne de Montage" des Idées
+## 🏗️ Phase 1 : Dissocier (Le Puzzle)
 
-Imaginez une usine où chaque phrase de votre document passe par trois ateliers différents :
+Imaginez que vous recevez un immense château en LEGO déjà construit (votre PDF de 500 pages). Pour comprendre comment il est fait, vous devez le démonter proprement.
+
+1.  **Démontage** : L'IA sépare chaque brique (paragraphes, tableaux).
+2.  **Étiquetage** : Chaque brique reçoit une étiquette : "C'est de la Sécurité", "C'est du Prix", etc.
+3.  **Ancrage** : On note exactement d'où vient chaque brique. Impossible pour l'IA d'inventer une pièce qui n'existait pas dans le château d'origine !
+
+---
+
+## 🔬 Phase 2 : Traiter (La Chaîne de Montage)
+
+Une fois les briques séparées, elles passent par trois ateliers spécialisés pour être vérifiées :
 
 ### 🛠️ Atelier 1 : Le Traducteur (BABOK)
-*   **Son but** : Transformer le langage flou en instructions claires.
-*   **Avant** : "Il faut que ce soit sécurisé."
-*   **Après** : "Le Système doit Authentifier l'Utilisateur via un Mot de passe."
+Il réécrit les phrases floues. 
+*   *Exemple* : "L'accès doit être protégé" devient "Le Système doit Authentifier l'Utilisateur". On sait enfin **qui** fait **quoi**.
 
-### 🐺 Atelier 2 : Le Chasseur de Loups (Wolf Agent)
-*   **Son but** : Trouver les pièges cachés (mots flous).
-*   **Ce qu'il traque** : Les mots comme *moderne*, *efficace*, *simple*, *rapide*.
-*   **Résultat** : Un score de danger. Si le mot est trop flou, l'IA dit : "⚠️ Attention, ce point n'est pas précis, demandez des détails au client !".
+### 🐺 Atelier 2 : Le Chasseur de Loups (Radar à Loups)
+Il traque les mots "pièges" comme *rapide*, *moderne* ou *efficace*.
+*   *Action* : Si une brique est trop floue, il met un carton rouge 🚩. Vous devez demander des précisions au client.
 
 ### 🛡️ Atelier 3 : Le Gardien (ISO 25010)
-*   **Son but** : Deviner ce qui a été oublié.
-*   **Action** : Si vous parlez de "Stocker des données", il va dire : "Attendez ! Vous avez oublié de parler de comment on les supprime et comment on les sauvegarde !".
+Il devine ce que le client a oublié de dire.
+*   *Action* : Si vous parlez de "Stocker des données", il demande : "Et comment on les supprime ?". Il évite les mauvaises surprises plus tard.
 
 ---
 
-## 2. Pourquoi utiliser cet outil ?
+## 🚀 Pourquoi cette méthode est-elle la meilleure ?
 
-Normalement, un humain mettrait des jours à repérer tous ces petits détails techniques. L'IA, elle, fait ce travail de "fourmi" en quelques secondes pour vous aider à rédigez une réponse parfaite et sans risque.
+En utilisant cette logique de **Dissociation** et de **Traitement Granulaire**, vous ne faites plus de l'approximation. Vous faites de l'**ingénierie de réponse**. Vous éliminez les risques contractuels et vous gagnez un temps précieux.
 
 ---
 
-🔒 **Zéro Cloud** : Vos documents restent chez vous. Rien ne sort de votre ordinateur.
+🔒 **Confidentialité** : Ce système est votre coffre-fort personnel. Rien ne sort de votre ordinateur.

@@ -1,60 +1,52 @@
-# 🏗️ Architecture Technique : Augmented BID IA (V2.1)
+# 🏗️ Architecture Technique : Le Déterminisme au service du Bid
 
-Ce document détaille l'ingénierie interne du système, de l'ingestion à l'analyse déterministe.
-
----
-
-## 📊 1. Pipeline Global de Données
-
-```mermaid
-graph TD
-    A[📄 PDF Brut] --> B[⚙️ Parser Docling]
-    B --> C[🏷️ Tagging Sémantique]
-    C --> D[🗄️ Indexation RRF]
-    D --> E{🔍 Audit Stratégique}
-    E --> F[🔬 Analyse Granulaire]
-    E --> G[✅ Gap Analysis]
-```
+Ce document détaille la logique de traitement en deux phases : Dissociation et Traitement Granulaire.
 
 ---
 
-## 🔬 2. Chaîne de Montage Granulaire (Micro-Agents)
+## 🏭 Phase 1 : Ingestion & Décomposition (Dissocier)
 
-C'est ici que l'IA se transforme en ingénieur système. Chaque exigence extraite passe par trois filtres successifs :
+L'objectif est d'isoler l'information pour éliminer le "bruit" contextuel tout en garantissant une traçabilité parfaite.
 
-```text
-ENTRÉE : "L'accès doit être rapide et sécurisé."
-   |
-   ▼
-[📖 AGENT BABOK] ────────► Normalisation atomique
-   |                      (Sujet: Système, Action: Authentifier, Contrainte: < 2s)
-   ▼
-[🐺 RADAR À LOUPS] ──────► Détection d'ambiguïté
-   |                      (Score: 45/100, Loup détecté: "rapide")
-   ▼
-[🛡️ AGENT ISO 25010] ────► Inférence de complétude
-   |                      (Manque détecté: Gestion des mots de passe, Chiffrement)
-   ▼
-SORTIE : Exigence structurée ou PENDING_CLARIFICATION
-```
+### 1. Parser Document (Objets JSON)
+- **Action :** Extraction de la structure (titres, tableaux, annexes).
+- **Format :** Chaque élément est transformé en un objet JSON contenant sa position hiérarchique (breadcrumbs) et sa page.
+- **Résultat :** Une unité d'information "atomique".
+
+### 2. Routeur / Classifier
+- **Action :** Affectation d'un contexte métier (Sécurité, Performance, Fonctionnel).
+- **Utilité :** Permet aux micro-agents de la Phase 2 d'appliquer des règles de complétude spécifiques au domaine.
+
+### 3. Base Vectorielle & Immuabilité
+- **Concept :** Gère l'**immuabilité**. 
+- **Ancrage :** Une fois un fragment stocké, son ID (Hash MD5) le lie définitivement à sa position source. Cela interdit toute dérive sémantique lors des phases de génération suivantes.
 
 ---
 
-## 🧠 3. Le Moteur de Recherche Hybride (RRF)
+## 🔬 Phase 2 : Analyse Granulaire (Traiter - Les Micro-Agents)
 
-Pour une précision maximale, nous fusionnons deux types de recherches :
+Cette phase est le cœur du déterminisme. Elle utilise trois agents spécialisés travaillant en chaîne de montage.
 
-| Moteur | Type | Force |
-|---|---|---|
-| **ChromaDB** | Vectoriel | Comprend le sens (ex: "Argent" -> "Prix") |
-| **BM25** | Textuel | Trouve les mots exacts (ex: "ISO 27001") |
+### 1. Agent Traducteur BABOK (Normalisation Atomique)
+Il transforme le langage naturel souvent passif en exigences structurées.
+- **Formule :** $\text{Condition} + \text{Sujet} + \text{Action} + \text{Objet} + \text{Contrainte}$.
+- **Exemple :** 
+    - *Entrée :* "L'accès doit être sécurisé."
+    - *Sortie :* "Le Système [Sujet] DOIT authentifier [Action] l'Utilisateur [Objet] via un protocole MFA [Contrainte]."
 
-**Fusion RRF** : `Score = 1/(k + rang_vecteur) + 1/(k + rang_bm25)`. Seuls les documents pertinents dans les deux mondes remontent en tête.
+### 2. Agent Radar à Loups (Désambiguïsation)
+Il agit comme une fonction de hachage de la qualité sémantique.
+- **Action :** Traque les "loups" (termes flous : *ergonomique, rapide, moderne*).
+- **Statut :** Tant que le score d'ambiguïté n'est pas nul, l'exigence est bloquée dans l'état `PENDING_CLARIFICATION`.
+
+### 3. Agent de Complétude (Inférence & ISO 25010)
+Utilisant la norme ISO 25010, il identifie les **exigences implicites**. 
+- **Action :** S'il détecte une fonction de "Stockage de données", il vérifie la présence de transitions d'états pour la "Suppression" ou le "Chiffrement". 
+- **Sortie :** En cas d'absence, il génère automatiquement un **Gap Ticket**.
 
 ---
 
-## 🛠️ Stack Technique & Standard
-- **LLM** : Ollama (Qwen 2.5 / Llama 3.2 Vision).
-- **Standards** : BABOK (Business Analysis), ISO 25010 (Software Quality).
-- **Persistence** : Cache de fragments JSON & IDs MD5 déterministes.
-- **Code** : Python 3.10+, Type Hints, PEP8.
+## 🛠️ Stack Technologique
+- **Intelligence :** Ollama (Qwen 2.5 / Llama 3.2 Vision).
+- **Indexation :** Hybrid Search (ChromaDB + BM25) avec Fusion RRF.
+- **Standards :** BABOK, ISO 25010.

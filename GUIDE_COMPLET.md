@@ -1,54 +1,40 @@
-# 📖 Guide complet du fonctionnement — rfp-analyse-ia
+# 📖 Manuel Opérationnel — Méthodologie Augmented BID
 
-> Un outil IA pour analyser automatiquement les appels d'offres (RFP/CCTP). Ce guide explique comment chaque pièce du puzzle fonctionne.
-
----
-
-## 🗺️ Vue d'ensemble — L'Intelligence Granulaire
-
-Le projet est divisé en scripts spécialisés :
-
-### 📥 1. Ingestion (`main.py`)
-- Découpe le PDF (IBM Docling).
-- Stocke les fragments dans une bibliothèque (ChromaDB + BM25).
-- **Analogie** : Le Facteur qui trie le courrier.
-
-### 🔬 2. Audit Granulaire (`granular_audit.py`)
-- Fait passer chaque exigence par les **3 Micro-Agents**.
-- Identifie les "loups" (ambiguïtés).
-- Suggère des complétudes basées sur l'ISO 25010.
-- **Analogie** : Le Labo d'analyse qui cherche les bactéries dans un échantillon.
-
-### ✅ 3. Gap Analysis (`compliance.py`)
-- Compare les exigences client avec votre catalogue de services.
-- Génère la matrice GTM finale.
-- **Analogie** : Le Juge qui compare le besoin et l'offre.
-
-### 🤖 4. Agent Expert (`rfp_agent.py`)
-- Répond à vos questions en utilisant tout le contexte (Texte + Vision).
-- Se souvient des échanges passés (Mémoire courte).
-- **Analogie** : Le Consultant Senior à qui vous pouvez tout demander.
+Ce guide explique comment appliquer la logique "Dissocier & Traiter" avec les outils du projet.
 
 ---
 
-## 🛠️ Configuration Stratégique (`.env`)
+## 🏭 Phase 1 : Dissocier (Ingestion)
 
-```bash
-# Modèles LLM
-OLLAMA_TEXT_MODEL=qwen2.5:7b
-OLLAMA_VISION_MODEL=llama3.2-vision
+L'ingestion n'est pas qu'une simple lecture, c'est une **décomposition chirurgicale**.
 
-# Parallélisme Ollama (Vitesse d'audit)
-OLLAMA_NUM_PARALLEL=1
-```
+### 📥 `main.py` & `local_parser.py`
+Ces scripts extraient les "objets" du PDF. Chaque objet JSON est scellé par un ID MD5 unique.
+- **Règle d'Immuabilité :** Une fois indexé, un fragment ne change plus. Il est ancré à sa page et sa section. Cela garantit que l'IA ne pourra jamais "inventer" une source qui n'existe pas.
+
+### 🏷️ Le Classifier
+Il affecte un contexte métier (TECHNIQUE, JURIDIQUE, etc.). Ce contexte est crucial pour la Phase 2 car il définit les règles de complétude à appliquer.
 
 ---
 
-## 🚀 Flux de Travail Conseillé
+## 🔬 Phase 2 : Traiter (Micro-Agents)
 
-1.  **Ingérer** le document : `python main.py --input doc.pdf`
-2.  **Lancer l'audit granulaire** : `python granular_audit.py`
-    - *Vérifiez les ambiguïtés dans `granular_audit_report.md`.*
-3.  **Lancer l'audit de conformité** : `python compliance.py`
-    - *Obtenez votre matrice de conformité dans `gap_analysis_report.md`.*
-4.  **Affiner** avec l'agent expert pour les points de détail.
+Le traitement granulaire élimine l'incertitude humaine.
+
+### 🤖 `micro_agents.py` (La Chaîne de Montage)
+Chaque exigence détectée passe par trois stations de travail :
+
+1.  **Station BABOK :** On réécrit l'exigence. Fini le "Il faudrait que...". On veut : `Sujet` + `Action` + `Objet`.
+2.  **Station Radar à Loups :** On calcule le score d'ambiguïté. Si vous voyez un score élevé dans `granular_audit_report.md`, l'exigence est "bloquée". Vous devez demander des précisions au client.
+3.  **Station ISO 25010 :** L'agent vérifie ce que le client a oublié.
+    - *Exemple :* Le document parle de "données bancaires" mais pas de "chiffrement". L'agent génère un **Gap Ticket**.
+
+---
+
+## 🚀 Résumé des Commandes Stratégiques
+
+| Action | Commande | Livrable |
+|---|---|---|
+| **Dissocier** | `python main.py --input doc.pdf` | Base Immuable |
+| **Traiter** | `python granular_audit.py` | Rapport de Désambiguïsation |
+| **Comparer** | `python compliance.py` | Matrice GTM Finale |
