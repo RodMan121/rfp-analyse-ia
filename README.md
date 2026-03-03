@@ -1,5 +1,7 @@
 # 🏭 Augmented BID IA — Votre Assistant Privé pour Appels d'Offres
 
+> 💡 **Nouveau sur le projet ?** Lisez notre [📖 Guide complet du fonctionnement](GUIDE_COMPLET.md) pour tout comprendre en 5 minutes.
+
 **Imaginez un expert qui lit 500 pages de documents techniques en 2 minutes, repère toutes les obligations cachées, et vérifie si votre entreprise sait y répondre. Le tout, sans jamais envoyer vos données confidentielles sur Internet.**
 
 C'est exactement ce que fait **Augmented BID IA**.
