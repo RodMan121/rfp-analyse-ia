@@ -160,19 +160,38 @@ RÉPONSE (Analyste Senior) :"""
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Agent RFP Expert Multimodal")
-    parser.add_argument("question", help="Question à poser au document")
+    parser.add_argument("question", nargs="?", help="Question directe (optionnel si --file est utilisé)")
+    parser.add_argument("--file", default="data/prompt.md", help="Chemin vers un fichier Markdown contenant votre prompt")
     args = parser.parse_args()
     
+    # 1. Détermination de la source de la question
+    question_text = ""
+    if args.question:
+        question_text = args.question
+    else:
+        prompt_path = Path(args.file)
+        if prompt_path.exists():
+            logger.info(f"📄 Lecture du prompt depuis : {args.file}")
+            with open(prompt_path, "r", encoding="utf-8") as f:
+                question_text = f.read().strip()
+        else:
+            console.print(f"[bold red]Erreur :[/bold red] Aucune question fournie et le fichier '{args.file}' est introuvable.")
+            sys.exit(1)
+
+    if not question_text:
+        console.print("[bold yellow]Attention :[/bold yellow] Le prompt est vide.")
+        sys.exit(0)
+
     agent = RFPAgent()
     
-    # Correction du bug : Utilisation de la logique de routage existante pour déterminer le type
-    mode = agent._route_request(args.question)
+    # Logic de routage et exécution
+    mode = agent._route_request(question_text)
     title = "🖼️ ANALYSE VISUELLE" if mode == "VISION" else "📝 ANALYSE TEXTUELLE"
     model_used = agent.vision_model if mode == "VISION" else agent.text_model
     
     try:
-        answer = agent.ask(args.question)
+        answer = agent.ask(question_text)
         console.print(Panel(Markdown(answer), title=title, border_style="cyan", subtitle=f"Modèle: {model_used}"))
     except Exception as e:
-        logger.error(f"Erreur lors du traitement de la requête : {e}")
-        console.print(f"[bold red]Une erreur critique est survenue :[/bold red] {e}")
+        logger.error(f"Erreur lors du traitement : {e}")
+        console.print(f"[bold red]Erreur critique :[/bold red] {e}")

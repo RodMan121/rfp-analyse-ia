@@ -4,61 +4,53 @@ Un système d'analyse d'Appels d'Offres (RFP) **100% local, multimodal** et orie
 
 ---
 
-## 🌟 C'est quoi la différence avec un RAG classique ?
+## 🌟 Pourquoi utiliser ce logiciel ?
 
-Contrairement à un simple agent conversationnel, **Augmented BID IA** est conçu pour les professionnels du "Bid Management" :
-
-```text
-RAG CLASSIQUE              |   AUGMENTED BID IA
----------------------------|----------------------------------
-"Cherche dans le texte"    |   "Cherche (Vecteurs) + Vérifie (BM25)"
-"Donne une réponse"        |   "Vérifie la Conformité ✅/⚠️/❌"
-"Texte uniquement"         |   "Analyse aussi les Schémas & Photos"
-"Amnésique"                |   "Mémoire de conversation résumée"
-```
+| RAG CLASSIQUE              |   AUGMENTED BID IA
+|---------------------------|----------------------------------
+| "Cherche dans le texte"    |   "Cherche (Vecteurs) + Vérifie (BM25)"
+| "Donne une réponse"        |   "Vérifie la Conformité ✅/⚠️/❌"
+| "Texte uniquement"         |   "Analyse aussi les Schémas & Photos"
+| "Amnésique"                |   "Mémoire de conversation résumée"
 
 ---
 
-## 🚀 Guide d'Utilisation (Tutoriel)
+## 🚀 Guide d'Utilisation Rapide
 
-### Étape 1 : Indexation des documents
+### 1. Indexation (Une seule fois)
 Apprenez à l'IA ce qu'elle doit analyser (le RFP) et ce que vous savez faire (votre catalogue).
 
 ```bash
-# 1. Indexer le cahier des charges du client
+# Indexer le cahier des charges client
 ./venv/bin/python extract/main.py --input data/input/mon_rfp.pdf
 
-# 2. Indexer vos plaquettes commerciales (Référentiel)
-./venv/bin/python extract/main.py --input data/input/mon_catalogue.pdf --collection service_catalog
+# Indexer votre référentiel technique (Catalogue)
+./venv/bin/python extract/main.py --input data/input/notre_savoir_faire.pdf --collection service_catalog
 ```
 
-### Étape 2 : Analyse de Qualité & Gap Analysis
-Vérifiez ce que l'IA a compris *avant* de lui faire confiance aveuglément.
+### 2. Analyse Métier (Gap Analysis)
+Générez la matrice de conformité automatique entre le client et vous.
 ```bash
-# 3. Rapport d'Ingestion & Qualité (Points flous ?)
-./venv/bin/python extract/confidence_report.py --rfp "mon_rfp.pdf"
-
-# 4. Audit & Gap Analysis (Matrice de conformité GTM)
 ./venv/bin/python extract/phase2/compliance.py
 ```
+➡️ Rapport disponible dans : `data/gap_analysis_report.md`
 
-### Étape 3 : Agent Expert (Dialogue libre)
-Besoin d'un point de détail ? Interrogez l'agent directement :
+### 3. Dialogue Expert (Méthode Simple ✨)
+C'est la méthode recommandée pour travailler. Plus besoin de taper de longues commandes :
+1.  Éditez le fichier **`data/prompt.md`** (mettez-y votre question complexe).
+2.  Lancez l'agent sans argument :
 ```bash
-./venv/bin/python extract/rfp_agent.py "Quels sont les pénalités de retard ?"
+./venv/bin/python extract/rfp_agent.py
 ```
+L'IA lira le fichier Markdown et affichera la réponse formatée dans votre terminal.
 
 ---
 
 ## 📊 Structure Didactique du Code
 
-| Dossier | Rôle | Métaphore |
-|---|---|---|
-| `extract/phase1/` | Moteur d'ingestion | **Le Bibliothécaire** : Lit, classe et indexe. |
-| `extract/phase2/` | Intelligence d'audit | **L'Expert Métier** : Analyse les écarts et rédige le rapport. |
-| `data/` | Stockage local | **Le Coffre-fort** : Vos documents confidentiels ne sortent jamais d'ici. |
+- `extract/phase1/` : **Le Bibliothécaire** (Parsing, Chunking, Indexation).
+- `extract/phase2/` : **L'Expert Métier** (Compliance, Gap Analysis).
+- `data/` : **Le Coffre-fort** (Vos documents confidentiels restent ici).
 
----
-
-🔒 **Confidentialité** : Ce système tourne **100% en local**. Rien n'est envoyé sur internet.
-*(Architecture détaillée disponible dans [ARCHITECTURE.md](ARCHITECTURE.md))*
+🔒 **Sécurité** : 100% Local. Aucune donnée n'est envoyée sur internet.
+*(Architecture détaillée dans [ARCHITECTURE.md](ARCHITECTURE.md))*
