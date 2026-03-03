@@ -19,9 +19,11 @@ Le système génère une **Technical Baseline** bi-format à la fin du processus
 
 ## 🚀 Guide d'Utilisation Automatisé (1-2-3)
 
-1.  **Dissocier (Phase 1)** : Ingestion et ancrage immuable.
+1.  **Dissocier (Phase 1)** : Ingestion et ancrage immuable avec contexte dynamique.
     ```bash
-    ./venv/bin/python extract/main.py --input data/input/mon_rfp.pdf
+    # Exemple avec contexte libre
+    ./venv/bin/python extract/main.py --input data/input/mon_rfp.pdf \
+      --context "RFP pour une application métier, exigences BN-XXX, schémas"
     ```
 2.  **Traiter (Phase 2 ✨)** : Moissonnage industriel par les Micro-Agents.
     ```bash

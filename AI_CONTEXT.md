@@ -8,8 +8,8 @@ Ce projet n'est pas un système RAG classique, c'est une **Machine à État Fini
 - **Règle de Sûreté :** Ne jamais forcer la transition vers `CLEAN` si l'ambiguïté est > 0. Le blocage est une *feature*, pas un bug.
 
 ## ⚙️ Méthodologie "Dissocier, Traiter, Associer"
-- **Dissocier (Phase 1)** : Ancrage MD5 strict obligatoire. Filtrage du bruit structurel (regex) dès l'ingestion pour éviter la pollution de la base vectorielle.
-- **Traiter (Phase 2)** : Utilisation exclusive du pattern **Micro-Agents**. L'agent BABOK doit impérativement extraire les identifiants officiels (`BN-XXX`) et confirmer la nature métier du fragment via le flag `is_real_requirement`.
+- **Dissocier (Phase 1)** : Ancrage MD5 strict obligatoire. Filtrage du bruit structurel (regex) et adaptation thématique via `DocumentContext` dès l'ingestion.
+- **Traiter (Phase 2)** : Utilisation exclusive du pattern **Micro-Agents**. L'agent BABOK doit utiliser `DocumentContext` pour adapter ses regex d'ID et ses prompts.
 - **Associer (Phase 3)** : Dédoublonnage sémantique obligatoire avant certification. Seules les exigences `CLEAN`, `AUDITED` ou `NORMALIZED` avec identifiant officiel sont éligibles à la baseline.
 
 ## 🛠️ Stack & Standards Techniques

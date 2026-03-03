@@ -4,6 +4,7 @@
 
 ### Phase 1 : Ingestion & Décomposition (Dissocier)
 - [x] Découpage structurel des PDF (IBM Docling).
+- [x] **Contexte Documentaire v12** : Adaptation dynamique via description libre (RFP, CCTP, Contrats).
 - [x] Ancrage déterministe avec ID MD5 unique par fragment.
 - [x] Recherche Hybride RRF (ChromaDB + BM25).
 

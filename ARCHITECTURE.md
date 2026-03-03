@@ -9,9 +9,9 @@ Ce document décrit l'organisation de l'Usine à RFP basée sur une Machine à �
 ```mermaid
 graph TD
     subgraph "PHASE 1 : Dissocier"
+        USER[👤 Description Libre] -->|Context Builder| CTX[📄 document_context.json]
         A[📄 Document Brut] -->|Docling Multimodal| B(🧩 Fragments Texte & Images)
-        B -->|OCR & Extraction PNG| IMG[📸 data/output_images/]
-        B -->|Hash MD5| C[(🗄️ Base Immuable)]
+        B & CTX -->|Smart Filtering| C[(🗄️ Base Immuable)]
     end
     
     subgraph "PHASE 2 : Traiter (FSM Async)"

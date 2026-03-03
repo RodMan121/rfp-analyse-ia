@@ -9,18 +9,28 @@ from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
 
-# FIX v11 : Filtres de bruit structurels
-_NOISE_PATTERNS = re.compile(
+# Import optionnel du contexte documentaire (évite import circulaire)
+try:
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from document_context import DocumentContext as _DocumentContext
+except ImportError:
+    _DocumentContext = None
+
+# Filtres de bruit structurels GÉNÉRIQUES (indépendants du document)
+_NOISE_PATTERNS_GENERIC = re.compile(
     r"if printed,?\s*make sure"
     r"|this document contains confidential"
-    r"|essp-rd-\d+\s+iss\."
     r"|page \d+\s+of\s+\d+"
     r"|figure \d+\s*:"
     r"|this signature sheet was generated"
     r"|document creation"
     r"|document's signature sheet"
     r"|applicable version"
-    r"|this chapter must be quoted",
+    r"|this chapter must be quoted"
+    r"|\biss\.\s*\d{2}-\d{2}\b"
+    r"|\bcertified\s+ansp\s+by\b"
+    r"|\bif\s+printed\b",
     re.IGNORECASE
 )
 _MIN_CONTENT_LENGTH = 80
@@ -35,7 +45,26 @@ class AtomicDecomposition:
 class LocalParser:
     """Analyseur local avec Vision activée pour extraire schémas et maquettes."""
 
-    def __init__(self):
+    def __init__(self, doc_context=None):
+        """
+        Args:
+            doc_context: instance de DocumentContext pour adapter le filtrage
+                         au type de document. Si None, filtrage générique.
+        """
+        self.doc_context = doc_context
+
+        # Combine les patterns génériques + patterns spécifiques au document
+        if doc_context is not None:
+            extra_re = doc_context.get_extra_noise_regex()
+            if extra_re:
+                combined = f"(?:{_NOISE_PATTERNS_GENERIC.pattern})|(?:{extra_re.pattern})"
+                self._noise_re = re.compile(combined, re.IGNORECASE)
+                logger.info(f"🔧 Filtre bruit étendu avec {len(doc_context.extra_noise_patterns)} pattern(s) documentaire(s)")
+            else:
+                self._noise_re = _NOISE_PATTERNS_GENERIC
+        else:
+            self._noise_re = _NOISE_PATTERNS_GENERIC
+
         # Configuration de la Vision et de l'extraction d'images
         pipeline_options = PdfPipelineOptions()
         pipeline_options.do_ocr = True
@@ -84,18 +113,17 @@ class LocalParser:
                     img_name = f"page_{page_no}_{hashlib.md5(text_clean.encode()).hexdigest()[:8]}.png"
                     image_path = str(self.img_dir / img_name)
                     
-                    # Sauvegarde physique de l'image
                     item.image.save(image_path)
                     logger.debug(f"📸 Image extraite : {img_name}")
                     
                     category = "IMAGE"
-                    # Si l'image a une légende, on la garde comme contenu
                     text_clean = f"[IMAGE SOURCE: {img_name}] {text_clean}"
 
-                # Filtrage du bruit textuel (uniquement si ce n'est pas une image)
+                # --- FIX v11 : Filtrage de bruit avec regex contextuelle ---
                 if category != "IMAGE":
                     if len(text_clean) < _MIN_CONTENT_LENGTH: continue
-                    if _NOISE_PATTERNS.search(text_clean): continue
+                    if self._noise_re.search(text_clean): continue
+                # -----------------------------------------------------------
 
             except Exception as e:
                 logger.error(f"⚠️ Erreur item : {e}")
@@ -128,5 +156,8 @@ class LocalParser:
                 )
             )
 
-        logger.success(f"✅ Extraction terminée : {len(decompositions)} fragments (incluant images).")
+        logger.success(f"✅ Extraction terminée : {len(decompositions)} fragments.")
         return decompositions
+
+# Alias pour compatibilité avec le reste du pipeline
+DoclingDecomposer = LocalParser
