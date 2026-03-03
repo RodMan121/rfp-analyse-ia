@@ -20,7 +20,7 @@ graph TD
         SEM -->|Parallel Task N| LLM2{LLM}
         LLM1 & LLM2 -->|Agent BABOK| E{NORMALIZED}
         E -->|Agent Radar| F{CLEAN}
-        F -->|Agent ISO| G{AUDITED}
+        F -->|Agent ISO 25010| G{AUDITED}
         F -.->|Score > 0| H[🚩 STALLED]
     end
     
@@ -40,7 +40,7 @@ L'usine est optimisée pour le traitement industriel de documents volumineux (te
 - **Asynchronisme (asyncio) :** Toutes les phases de traitement LLM sont asynchrones. Le `RequirementHarvester` distribue les tâches en parallèle sans bloquer le thread principal.
 - **Contrôle de Flux (Semaphore) :** Un sémaphore limite le nombre de requêtes simultanées (`MAX_CONCURRENT_REQUESTS`) pour éviter la saturation de la VRAM (GPU) ou les blocages réseau.
 - **Optimisation VRAM :** Pour les configurations locales modestes (4 Go VRAM), le système bride dynamiquement le contexte (`num_ctx: 1024`) et utilise des modèles optimisés comme `llama3.2:3b`.
-- **Auto-Switch LLM :** Le moteur détecte automatiquement la présence d'une `GOOGLE_API_KEY` pour basculer de l'inférence locale (Ollama) vers le Cloud (Gemini), tout en conservant la même interface asynchrone.
+- **Auto-Switch Multi-LLM :** Le moteur détecte dynamiquement les clés API (OpenRouter, Gemini) pour basculer de l'inférence locale vers le Cloud, garantissant une flexibilité totale.
 
 ---
 
@@ -60,4 +60,4 @@ Un fichier JSON structuré pour l'intégration ALM (Jira, DOORS).
 
 - **Project UID :** Hash MD5 global garantissant l'immuabilité de la baseline.
 - **Fail-Safe :** Mécanisme de retry asynchrone avec backoff exponentiel pour les erreurs de quota (429) ou de timeout.
-- **Observabilité :** `factory_logger` centralisé pour tracer les événements de production.
+- **Observabilité :** `factory_logger` centralisé avec système de **buffer mémoire** (flush toutes les 20 entrées) pour maximiser les performances I/O lors des traitements massifs.

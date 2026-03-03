@@ -14,9 +14,10 @@ Ce projet n'est pas un système RAG classique, c'est une **Machine à État Fini
 
 ## 🛠️ Stack & Standards Techniques
 - **Architecture Asynchrone** : Utilisation systématique de `asyncio` pour les entrées/sorties LLM. Toutes les méthodes `trigger` des agents et les appels LLM doivent être asynchrones (`async`/`await`).
-- **LLM Hybride** : Support natif d'**Ollama** (`llama3.2:3b`) et de l'**API Gemini** (`gemini-2.0-flash`). Centralisation obligatoire via `_call_llm()` asynchrone.
+- **LLM Hybride & Multi-Cloud** : Support natif d'**Ollama**, **Gemini** et **OpenRouter**. Centralisation obligatoire via `_call_llm()` asynchrone avec gestion de retry robuste.
 - **Gestion des Ressources** : Utilisation de `Semaphore` pour limiter la concurrence LLM. Bridage du contexte (`num_ctx`) pour l'optimisation VRAM locale.
-- **Data Integrity** : `dataclasses` obligatoires pour la manipulation de données. Mutation en place interdite (travailler sur des copies).
+- **Data Protection** : Interdiction formelle de muter les dictionnaires source lors du chargement (ex: pas de `pop()` sur les données de registre). Travailler systématiquement sur des copies.
+- **Data Integrity** : `dataclasses` obligatoires pour la manipulation de données.
 - **JSON Handling** : Toujours utiliser `_clean_json_response()` pour parser les retours LLM (qui contiennent souvent du Markdown indésirable).
 - **PEP8 & Ruff** : Adhérence stricte aux standards PEP8 via `Ruff`. Formatage automatique et linting obligatoires avant chaque commit.
 - **Typage** : Utilisation intensive du typage statique (`mypy`) avec Python 3.12+.
