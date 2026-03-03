@@ -1,6 +1,6 @@
 # 🏗️ Architecture Déterministe : FSM-Driven Engine
 
-Ce document décrit l'organisation de l'Usine à RFP basée sur une Machine à État Finis.
+Ce document décrit l'organisation de l'Usine à RFP basée sur une Machine à État Finis et une exécution asynchrone haute performance.
 
 ---
 
@@ -13,17 +13,19 @@ graph TD
         B -->|Hash MD5| C[(🗄️ Base Immuable)]
     end
     
-    subgraph "PHASE 2 : Traiter (FSM)"
+    subgraph "PHASE 2 : Traiter (FSM Async)"
         C -->|Requirement Harvester| D[Industrial Scanning]
-        D -->|Unified LLM Call| LLM{Ollama OR Gemini}
-        LLM -->|Agent BABOK| E{NORMALIZED}
+        D -->|Async Dispatcher| SEM{Semaphore}
+        SEM -->|Parallel Task 1| LLM1{LLM}
+        SEM -->|Parallel Task N| LLM2{LLM}
+        LLM1 & LLM2 -->|Agent BABOK| E{NORMALIZED}
         E -->|Agent Radar| F{CLEAN}
         F -->|Agent ISO| G{AUDITED}
         F -.->|Score > 0| H[🚩 STALLED]
     end
     
     subgraph "PHASE 3 : Associer"
-        G -->|Certification| I{BASELINE}
+        G & F & E -->|Certification| I{BASELINE}
         I --> J[📄 Rendu Markdown]
         I --> K[💾 Rendu JSON ALM]
     end
@@ -31,20 +33,31 @@ graph TD
 
 ---
 
-## 🎨 2. Certification & Produits de Sortie (Output Node)
+## ⚡ 2. Performance & Gestion des Ressources
+
+L'usine est optimisée pour le traitement industriel de documents volumineux (testée sur +1400 fragments) :
+
+- **Asynchronisme (asyncio) :** Toutes les phases de traitement LLM sont asynchrones. Le `RequirementHarvester` distribue les tâches en parallèle sans bloquer le thread principal.
+- **Contrôle de Flux (Semaphore) :** Un sémaphore limite le nombre de requêtes simultanées (`MAX_CONCURRENT_REQUESTS`) pour éviter la saturation de la VRAM (GPU) ou les blocages réseau.
+- **Optimisation VRAM :** Pour les configurations locales modestes (4 Go VRAM), le système bride dynamiquement le contexte (`num_ctx: 1024`) et utilise des modèles optimisés comme `llama3.2:3b`.
+- **Auto-Switch LLM :** Le moteur détecte automatiquement la présence d'une `GOOGLE_API_KEY` pour basculer de l'inférence locale (Ollama) vers le Cloud (Gemini), tout en conservant la même interface asynchrone.
+
+---
+
+## 🎨 3. Certification & Produits de Sortie (Output Node)
 
 La Phase 3 génère deux artefacts certifiés dès que l'état **BASELINE** est atteint :
 
 ### A. Le Livrable Humain (`technical_baseline_final.md`)
-Un document structuré pour les décideurs et les architectes. Il contient la matrice MoSCoW, le score d'intégrité Reverse TOGAF et le catalogue complet des exigences validées.
+Un document structuré avec matrice MoSCoW, score d'intégrité et catalogue complet.
 
 ### B. Le Livrable Machine (`technical_baseline_alm.json`)
-Un fichier structuré avec tous les attributs techniques (UID, Sujet, Action, Objet, Contrainte). Ce fichier est conçu pour être importé par script dans des outils de gestion des exigences (ALM).
+Un fichier JSON structuré pour l'intégration ALM (Jira, DOORS).
 
 ---
 
-## 🛠️ 3. Intégrité, Sûreté & Observabilité
+## 🛠️ 4. Intégrité, Sûreté & Observabilité
 
-- **Project UID :** Le sceau d'immuabilité (ALM-XXXX) est un hash calculé sur l'intégralité des exigences certifiées. Toute modification ultérieure briserait cette signature.
-- **Fail-Safe :** Une exigence ne peut atteindre l'état BASELINE si son score d'ambiguïté en Phase 2 n'est pas strictement égal à zéro.
-- **Observabilité :** Le système intègre un `factory_logger` (Phase 2 & 3) qui trace chaque événement industriel (début de scan, certification, erreurs de pipeline) pour une maintenance préventive facilitée.
+- **Project UID :** Hash MD5 global garantissant l'immuabilité de la baseline.
+- **Fail-Safe :** Mécanisme de retry asynchrone avec backoff exponentiel pour les erreurs de quota (429) ou de timeout.
+- **Observabilité :** `factory_logger` centralisé pour tracer les événements de production.

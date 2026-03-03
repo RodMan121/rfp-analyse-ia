@@ -37,8 +37,9 @@ Le système génère une **Technical Baseline** bi-format à la fin du processus
 
 ## 🛡️ Standards de Qualité & Ingénierie
 Le code est audité et maintenu selon des standards rigoureux :
+- **Haute Performance (Async)** : Architecture asynchrone complète via `asyncio`. Traitement parallèle des exigences avec gestion de concurrence.
+- **Optimisation GPU (VRAM)** : Pilotage intelligent du contexte (`num_ctx`) et limitation de concurrence pour tourner sur des configurations modestes (4 Go VRAM).
 - **Hybride Cloud/Local** : Support natif d'**Ollama** (Local) et de l'**API Gemini** (Google GenAI). Switch automatique via détection de la clé API.
-- **Linting & Formatage** : Utilisation de `Ruff` (PEP8) pour une base de code propre et performante.
 - **Typage** : Vérification statique par `Mypy` (Python 3.12+).
 - **Auditabilité** : Chaque exigence porte son `project_uid` unique et son historique de transition.
 

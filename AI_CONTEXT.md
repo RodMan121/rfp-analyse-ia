@@ -13,7 +13,9 @@ Ce projet n'est pas un système RAG classique, c'est une **Machine à État Fini
 - **Associer (Phase 3)** : Le rendu final (Technical Baseline) doit être sérialisable (JSON/Markdown) et prêt pour une injection dans un outil ALM.
 
 ## 🛠️ Stack & Standards Techniques
-- **LLM Hybride** : Support natif d'**Ollama** (`qwen2.5:7b`) et de l'**API Gemini** (`gemini-2.0-flash`). Centralisation via `_call_llm()` dans les classes parentes.
+- **Architecture Asynchrone** : Utilisation systématique de `asyncio` pour les entrées/sorties LLM. Toutes les méthodes `trigger` des agents et les appels LLM doivent être asynchrones (`async`/`await`).
+- **LLM Hybride** : Support natif d'**Ollama** (`llama3.2:3b`) et de l'**API Gemini** (`gemini-2.0-flash`). Centralisation obligatoire via `_call_llm()` asynchrone.
+- **Gestion des Ressources** : Utilisation de `Semaphore` pour limiter la concurrence LLM. Bridage du contexte (`num_ctx`) pour l'optimisation VRAM locale.
 - **Data Integrity** : `dataclasses` obligatoires pour la manipulation de données. Mutation en place interdite (travailler sur des copies).
 - **JSON Handling** : Toujours utiliser `_clean_json_response()` pour parser les retours LLM (qui contiennent souvent du Markdown indésirable).
 - **PEP8 & Ruff** : Adhérence stricte aux standards PEP8 via `Ruff`. Formatage automatique et linting obligatoires avant chaque commit.

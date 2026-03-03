@@ -22,13 +22,19 @@ Préparez la matière première.
 ```bash
 python extract/main.py --input data/input/mon_rfp.pdf
 ```
-
 ### 2. Moissonnage (Phase 2)
-Lancez l'usine de traitement complète. Contrairement à `granular_audit.py` qui ne fait qu'un échantillon, `requirement_harvester.py` scanne **l'intégralité** de la base immuable pour en extraire chaque exigence potentielle.
+Lancez l'usine de traitement complète. `requirement_harvester.py` scanne **l'intégralité** de la base immuable de manière asynchrone (parallèle).
+
 ```bash
 python extract/requirement_harvester.py
 ```
-*Vérifiez ensuite les logs dans la console pour voir le taux de réussite.*
+
+**🔧 Optimisation (Tuning) :**
+Si vous avez un GPU avec peu de VRAM (ex: 4 Go), vous pouvez ajuster les performances dans `requirement_harvester.py` :
+- `MAX_CONCURRENT_REQUESTS` : Nombre de fragments traités en même temps (Défaut : 2).
+- `num_ctx` (dans `micro_agents.py`) : Taille de la mémoire réservée pour chaque fragment (Défaut : 1024).
+
+---
 
 ### 3. Certification (Phase 3)
 Générez les livrables finaux.

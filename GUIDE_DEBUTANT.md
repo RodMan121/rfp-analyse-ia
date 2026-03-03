@@ -34,7 +34,7 @@ Vous êtes le chef d'atelier. Voici vos 3 commandes :
 2.  **Lancer le tapis roulant (Le Moissonnage)** :
     Vous dites aux robots d'inspecter l'intégralité des pièces :
     `python extract/requirement_harvester.py`
-    *(Cela crée le registre de toutes les exigences détectées et auditées).*
+    *(C'est ici que la magie opère : grâce à l'asynchronisme, plusieurs robots travaillent en parallèle pour traiter des centaines de pages en un temps record).*
 
 3.  **Emballer le produit final (La Baseline)** :
     Vous générez la Technical Baseline (Markdown & JSON) :

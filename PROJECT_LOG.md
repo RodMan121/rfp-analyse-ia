@@ -23,8 +23,10 @@
 ### 🛠️ Maintenance & Qualité (Ingénierie)
 - [x] Audit Qualité complet (Mars 2026).
 - [x] Migration vers standard PEP8 avec `Ruff`.
+- [x] **Refonte Asynchrone (asyncio)** : Pipeline complet (`harvester` & `composer`) en mode asynchrone pour la performance.
+- [x] **Optimisation VRAM** : Pilotage du contexte (`num_ctx`) et de la concurrence pour GPU 4 Go.
+- [x] **Records** : Succès du moissonnage industriel sur **1425 fragments**.
 - [x] Intégration hybride **Ollama / API Gemini** (Phase 2 & 3).
-- [x] Implémentation du **Requirement Harvester** (Moissonneur industriel).
 - [x] Système de logs centralisé (`factory_log.py`).
 
 ## 🚀 Prochaines étapes (Backlog)
