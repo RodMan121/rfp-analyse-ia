@@ -13,7 +13,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.live import Live
 
-# Chargement de la configuration (chemin relatif au fichier)
+# Configuration robuste
 env_path = Path(__file__).parent / ".env"
 load_dotenv(env_path)
 console = Console()
@@ -21,27 +21,29 @@ console = Console()
 class RFPAgent:
     """
     Agent Expert en analyse de documents RFP.
-    Supporte le texte, la vision, la mémoire et le streaming.
+    Supporte le texte, la vision (non-streamée), la mémoire et le streaming textuel.
     """
 
     def __init__(self, db_path: str = "data/chroma_db_hierarchical"):
         self.store = VectorStore(db_path=db_path)
         self.reranker = LocalReranker()
         
-        self.text_model = "qwen2.5:7b"
-        self.vision_model = "llama3.2-vision" 
+        # Modèles pilotés par variables d'environnement
+        self.text_model = os.getenv("OLLAMA_TEXT_MODEL", "qwen2.5:7b")
+        self.vision_model = os.getenv("OLLAMA_VISION_MODEL", "llama3.2-vision")
+        
         self.image_dir = Path("data/output_images")
         self.history = []
-        self.last_mode = "TEXT" # Pour suivi interne
+        self.last_mode = "TEXT"
         
         logger.info(f"🚀 Agent Expert prêt (Modèle: {self.text_model})")
 
     def _route_request(self, question: str) -> str:
-        """Détermine si la requête nécessite de la vision ou du texte."""
+        """Détermine l'intention (Texte vs Vision)."""
         router_prompt = f"Réponds UNIQUEMENT par 'VISION' si la question demande d'analyser une image/schéma, sinon 'TEXT'.\n\nQUESTION : {question}\nMODE :"
         try:
             response = ollama.generate(model=self.text_model, prompt=router_prompt, options={"num_predict": 5})
-            mode = response['response'].strip().upper()
+            mode = response.get('response', 'TEXT').strip().upper()
             return "VISION" if "VISION" in mode else "TEXT"
         except Exception as e:
             logger.warning(f"⚠️ Échec routage LLM ({e}), repli sur mots-clés.")
@@ -49,7 +51,7 @@ class RFPAgent:
             return "VISION" if any(kw in question.lower() for kw in keywords) else "TEXT"
 
     def ask(self, question: str, stream: bool = True) -> str:
-        """Point d'entrée principal avec gestion du streaming."""
+        """Point d'entrée principal."""
         self.last_mode = self._route_request(question)
         
         if len(self.history) > 8:
@@ -70,33 +72,32 @@ class RFPAgent:
         prompt = f"Résume cette conversation technique en 3 phrases :\n\n{history_text}"
         try:
             response = ollama.generate(model=self.text_model, prompt=prompt)
-            self.history = [{"role": "system", "content": f"Résumé: {response['response']}"}, *self.history[-2:]]
-        except: self.history = self.history[-4:]
+            self.history = [{"role": "system", "content": f"Résumé: {response.get('response', '')}"}, *self.history[-2:]]
+        except Exception:
+            # Correction audit : replacement du bare except par Exception
+            self.history = self.history[-4:]
 
     def _ask_text(self, question: str, stream: bool = True) -> str:
-        """Pipeline RAG textuel avec limite de contexte et streaming."""
+        """Pipeline RAG textuel avec streaming."""
         initial_results = self.store.search_hybrid(query=question, n_results=20)
         if not initial_results: return "⚠️ Aucun fragment trouvé."
         
         best_results = self.reranker.rerank(query=question, documents=initial_results, top_n=5)
         
-        # 1. Construction du contexte avec limite de taille
         MAX_CONTEXT_CHARS = 8000
         context_parts = []
         for r in best_results:
-            source_info = f"SOURCE: {r['metadata']['breadcrumbs']} (Page {r['metadata']['page']})"
+            source_info = f"SOURCE: {r['metadata']['breadcrumbs']} (P.{r['metadata']['page']})"
             context_parts.append(f"--- {source_info} ---\n{r['text']}")
         
         context = "\n\n".join(context_parts)
         if len(context) > MAX_CONTEXT_CHARS:
-            context = context[:MAX_CONTEXT_CHARS] + "\n\n[... contexte tronqué pour stabilité ...]"
+            context = context[:MAX_CONTEXT_CHARS] + "\n\n[... contexte tronqué ...]"
         
         history_str = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in self.history])
         
-        prompt = f"""Tu es un analyste senior. Réponds selon les règles :
-1. Basse-toi UNIQUEMENT sur le CONTEXTE ci-dessous.
-2. Cite TOUJOURS la section et la page.
-3. Si absent, dis "Information non présente".
+        prompt = f"""Tu es analyste senior. Réponds en te basant sur le CONTEXTE.
+CITE la section/page. Si absent, dis "Information non présente".
 
 ### HISTORIQUE :
 {history_str}
@@ -114,16 +115,16 @@ RÉPONSE :"""
             response_gen = ollama.generate(model=self.text_model, prompt=prompt, stream=True)
             with Live(Markdown(""), refresh_per_second=10, console=console) as live:
                 for chunk in response_gen:
-                    token = chunk['response']
+                    token = chunk.get('response', '')
                     full_response += token
                     live.update(Markdown(full_response))
             return full_response
         else:
             response = ollama.generate(model=self.text_model, prompt=prompt)
-            return response['response']
+            return response.get('response', '')
 
     def _ask_vision(self, question: str) -> str:
-        """Analyse visuelle multi-modale."""
+        """Analyse visuelle (non-streamée par limitation modèle vision)."""
         results = self.store.search_hybrid(query=question, n_results=3)
         if not results: return "⚠️ Impossible d'identifier la page."
         
@@ -134,9 +135,9 @@ RÉPONSE :"""
         if not image_path.exists():
             return f"⚠️ Capture visuelle introuvable (P.{page_no})."
 
-        prompt = f"Analyse cette image technique pour répondre à : {question}. Sois précis."
+        prompt = f"Analyse cette image technique pour répondre à : {question}."
         response = ollama.generate(model=self.vision_model, prompt=prompt, images=[str(image_path)])
-        return f"**(Analyse Visuelle - Page {page_no})**\n\n{response['response']}"
+        return f"**(Analyse Visuelle - Page {page_no})**\n\n{response.get('response', '')}"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Agent RFP Expert")
@@ -157,10 +158,11 @@ if __name__ == "__main__":
 
     if not question_text: sys.exit(0)
 
-    agent = RFPAgent()
-    # ask() gère déjà l'affichage streaming si stream=True
-    answer = agent.ask(question_text, stream=True)
-    
-    # Affichage final dans un panel
-    title = "🖼️ VISION" if agent.last_mode == "VISION" else "📝 TEXTE"
-    console.print(Panel(Markdown(answer), title=title, border_style="cyan"))
+    try:
+        agent = RFPAgent()
+        answer = agent.ask(question_text, stream=True)
+        title = "🖼️ VISION" if agent.last_mode == "VISION" else "📝 TEXTE"
+        console.print(Panel(Markdown(answer), title=title, border_style="cyan"))
+    except Exception as e:
+        logger.error(f"Erreur critique agent : {e}")
+        console.print(f"[bold red]Erreur :[/bold red] {e}")

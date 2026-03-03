@@ -1,6 +1,7 @@
-# Moteur de Parsing (Docling stable)
+# Parsing & PDF
 docling>=2.7.0
 docling-core>=2.6.0
+pypdf>=4.0.0
 
 # Intelligence & LLM
 ollama>=0.3.0

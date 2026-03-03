@@ -31,7 +31,8 @@ class VectorStore:
             try:
                 with open(self.bm25_path, "rb") as f:
                     data = pickle.load(f)
-                    self.bm25 = data["index"]; self.bm25_docs = data["docs"]
+                    self.bm25 = data["index"]
+                    self.bm25_docs = data["docs"]
                     logger.info(f"🔎 Index BM25 '{collection_name}' chargé.")
             except Exception as e:
                 logger.warning(f"⚠️ Index BM25 corrompu ({e}).")
@@ -45,7 +46,8 @@ class VectorStore:
         for f in fragments:
             content = f"SECTION: {f.breadcrumbs}\nCATÉGORIE: {f.category}\n\n{f.text}"
             fid = hashlib.md5(f"{f.source_file}_{f.page}_{f.text[:100]}".encode()).hexdigest()
-            ids.append(fid); documents.append(content)
+            ids.append(fid)
+            documents.append(content)
             metadatas.append({
                 "source": f.source_file, "section": f.section, 
                 "breadcrumbs": f.breadcrumbs, "page": f.page, "category": f.category
@@ -75,15 +77,20 @@ class VectorStore:
             scores = self.bm25.get_scores(tokenized_query)
             top_indices = np.argsort(scores)[-n_results:][::-1]
             for idx in top_indices:
-                if scores[idx] > 0: bm25_results.append(self.bm25_docs[idx])
+                if scores[idx] > 0:
+                    bm25_results.append(self.bm25_docs[idx])
 
         # RRF Fusion
-        k = 60; rrf_scores = {}; all_docs = {}
+        k = 60
+        rrf_scores = {}
+        all_docs = {}
         for rank, doc in enumerate(vec_results):
-            txt = doc["text"]; all_docs[txt] = doc
+            txt = doc["text"]
+            all_docs[txt] = doc
             rrf_scores[txt] = rrf_scores.get(txt, 0) + 1.0 / (k + rank + 1)
         for rank, doc in enumerate(bm25_results):
-            txt = doc["text"]; all_docs[txt] = doc
+            txt = doc["text"]
+            all_docs[txt] = doc
             rrf_scores[txt] = rrf_scores.get(txt, 0) + 1.0 / (k + rank + 1)
 
         sorted_texts = sorted(rrf_scores.keys(), key=lambda t: rrf_scores[t], reverse=True)

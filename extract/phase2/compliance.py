@@ -1,3 +1,4 @@
+import os
 import ollama
 import json
 from pathlib import Path
@@ -7,20 +8,21 @@ from concurrent.futures import ThreadPoolExecutor
 from phase1.vectorstore import VectorStore
 from phase1.reranker import LocalReranker
 
-TEXT_MODEL = "qwen2.5:7b"
+# Centralisation via .env
+TEXT_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "qwen2.5:7b")
 
 class ComplianceAuditAgent:
-    """Agent d'Audit avec Gap Analysis parallélisée."""
+    """Agent d'Audit avec Gap Analysis sécurisé."""
 
     def __init__(self, db_path: str = "data/chroma_db_hierarchical"):
         self.rfp_store = VectorStore(db_path=db_path, collection_name="rfp_hierarchical")
         self.catalog_store = VectorStore(db_path=db_path, collection_name="service_catalog")
         self.reranker = LocalReranker()
         self.model = TEXT_MODEL
-        logger.info(f"🛡️ Agent d'Audit parallélisé prêt.")
+        logger.info(f"🛡️ Agent d'Audit prêt (Modèle: {self.model})")
 
     def extract_requirements(self, category: str = "GENERAL") -> List[Dict]:
-        """Extraction séquentielle des exigences (nécessite du contexte)."""
+        """Extraction des exigences."""
         logger.info(f"🔎 Audit de la catégorie : {category}...")
         fragments = self.rfp_store.search_hybrid(query=f"CATÉGORIE: {category}", n_results=15)
         if not fragments: return []
@@ -30,8 +32,7 @@ class ComplianceAuditAgent:
             prompt = f"FRAGMENT :\n{frag['text']}\n\nExtraie les exigences précises en JSON : [{\"exigence\": \"...\", \"priorite\": \"...\"}]"
             try:
                 response = ollama.generate(model=self.model, prompt=prompt, format="json")
-                raw_json = response.get('response', '[]')
-                reqs = json.loads(raw_json)
+                reqs = json.loads(response.get('response', '[]'))
                 for r in reqs:
                     r['source'] = f"{frag['metadata']['breadcrumbs']} (P.{frag['metadata']['page']})"
                     all_requirements.append(r)
@@ -40,25 +41,28 @@ class ComplianceAuditAgent:
         return all_requirements
 
     def _analyze_single_gap(self, req: Dict) -> Dict:
-        """Méthode interne pour l'analyse d'une seule exigence (pour parallélisation)."""
-        know_how = self.catalog_store.search_hybrid(query=req['exigence'], n_results=3)
+        """Analyse d'une seule exigence sans mutation du dictionnaire d'entrée."""
+        # Correction audit : copie pour éviter race condition
+        result = {**req}
+        know_how = self.catalog_store.search_hybrid(query=result['exigence'], n_results=3)
         context = "\n".join([k['text'] for k in know_how]) if know_how else "AUCUN SAVOIR-FAIRE TROUVÉ."
         
-        prompt = f"EXIGENCE : {req['exigence']}\nSAVOIR-FAIRE : {context}\n\nDétermine la conformité en JSON : {\"statut\": \"...\", \"justification\": \"...\", \"score_confiance\": 0}"
+        prompt = f"EXIGENCE : {result['exigence']}\nSAVOIR-FAIRE : {context}\n\nDétermine la conformité en JSON : {\"statut\": \"...\", \"justification\": \"...\", \"score_confiance\": 0}"
         try:
             response = ollama.generate(model=self.model, prompt=prompt, format="json")
-            raw_json = response.get('response', '{}')
-            gap = json.loads(raw_json)
-            req.update(gap)
+            gap = json.loads(response.get('response', '{}'))
+            result.update(gap)
         except Exception as e:
-            logger.warning(f"⚠️ Échec Gap Analysis pour '{req['exigence'][:30]}' : {e}")
-            req.update({"statut": "ERREUR", "score_confiance": 0})
-        return req
+            logger.warning(f"⚠️ Échec Gap Analysis pour '{result['exigence'][:30]}' : {e}")
+            result.update({"statut": "ERREUR", "score_confiance": 0})
+        return result
 
     def analyze_gap(self, requirements: List[Dict]) -> List[Dict]:
-        """Analyse parallélisée (ThreadPool) pour gain de temps."""
-        logger.info(f"🧠 Gap Analysis parallélisée sur {len(requirements)} points...")
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        """Analyse parallélisée prudente."""
+        # Correction audit : Ollama est souvent séquentiel par défaut
+        workers = int(os.getenv("OLLAMA_NUM_PARALLEL", "1"))
+        logger.info(f"🧠 Gap Analysis ({workers} workers) sur {len(requirements)} points...")
+        with ThreadPoolExecutor(max_workers=workers) as executor:
             results = list(executor.map(self._analyze_single_gap, requirements))
         return results
 
@@ -77,4 +81,4 @@ if __name__ == "__main__":
     results = audit.analyze_gap(reqs)
     with open("data/gap_analysis_report.md", "w", encoding="utf-8") as f:
         f.write(audit.generate_report(results))
-    logger.success("✅ Audit terminé (parallélisé).")
+    logger.success("✅ Audit terminé.")
