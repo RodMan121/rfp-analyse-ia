@@ -25,6 +25,8 @@ graph TD
     subgraph "PHASE 3 : Associer"
         F -->|MoSCoW & TOGAF| H[📦 TECHNICAL BASELINE]
     end
+    
+    H --> I[node: ALM Ready Output]
 ```
 
 ---
@@ -47,15 +49,12 @@ Si l'agent Radar détecte un terme qualitatif non mesurable (*"ergonomique, rapi
 
 ---
 
-## 🧠 3. Moteur de Recherche Hybride (RRF)
+## 🎨 3. Synthèse & Baseline Technique (Output Node)
 
-Pour le Retrieval (RAG), nous fusionnons deux index :
-1.  **ChromaDB (Vectoriel)** : Embeddings pour le contexte sémantique.
-2.  **BM25 (Textuel)** : Fréquence de termes pour les acronymes exacts (ISO 27001).
-
-**Formule Reciprocal Rank Fusion (RRF)** :
-`Score(d) = Σ (1 / (k + Rang(d, moteur)))`
-*Avec une constante k=60. Ce qui garantit que seuls les fragments pertinents dans les deux domaines remontent à l'IA.*
+La Phase 3 réassemble uniquement les exigences ayant atteint l'état **AUDITED**.
+- **Technical Baseline Immuable :** Un document JSON (`technical_baseline_alm.json`), scellé par un UID déterministe. Il est prêt à être injecté dans un outil d'ALM (Jira, DOORS).
+- **Auditabilité :** Chaque exigence porte son `state_history`, prouvant son passage par tous les ateliers de validation.
+- **Reverse TOGAF :** Un score d'intégrité (1 à 5) évalue la viabilité sur les domaines Business, Data, Application et Technologie.
 
 ---
 
