@@ -11,6 +11,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict
 from dotenv import load_dotenv
 from google import genai
+from openai import AsyncOpenAI
 
 # Fix pour les imports
 sys.path.append(str(Path(__file__).parent.parent))
@@ -36,38 +37,39 @@ class TechnicalBaseline:
 
 class ArchitectureComposer:
     def __init__(self, model: Optional[str] = None):
+        or_key = os.getenv("OPENROUTER_API_KEY")
         api_key = os.getenv("GOOGLE_API_KEY")
-        if api_key and len(api_key) > 10 and "your_google" not in api_key:
+        
+        if or_key and len(or_key) > 10:
+            self.model = model or os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-001")
+            self.client_or = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=or_key)
+            self.mode = "OPENROUTER"
+        elif api_key and len(api_key) > 10 and "your_google" not in api_key:
             self.model = model or GEMINI_MODEL
-            self.client = genai.Client(api_key=api_key)
-            self.is_gemini = True
+            self.client_gemini = genai.Client(api_key=api_key)
+            self.mode = "GEMINI"
         else:
             self.model = model or TEXT_MODEL
-            self.is_gemini = False
+            self.mode = "OLLAMA"
             self.async_ollama = ollama.AsyncClient()
 
     async def _call_llm(self, prompt: str, format: str = "json") -> Dict:
-        """Appelle soit Gemini soit Ollama selon la configuration."""
-        if self.is_gemini:
-            try:
+        try:
+            if self.mode == "OPENROUTER":
+                response = await self.client_or.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"} if format == "json" else None
+                )
+                return {"response": response.choices[0].message.content}
+            elif self.mode == "GEMINI":
                 config = {"response_mime_type": "application/json"} if format == "json" else {}
-                response = await self.client.aio.models.generate_content(
-                    model=self.model, contents=prompt, config=config
-                )
+                response = await self.client_gemini.aio.models.generate_content(model=self.model, contents=prompt, config=config)
                 return {"response": response.text}
-            except Exception as e:
-                logger.error(f"❌ Erreur Gemini : {e}")
-                return {"response": "{}"}
-        else:
-            try:
-                response = await self.async_ollama.generate(
-                    model=self.model, prompt=prompt, format=format if format == "json" else None,
-                    options={"num_ctx": 2048, "temperature": 0.1}
-                )
+            else:
+                response = await self.async_ollama.generate(model=self.model, prompt=prompt, format=format if format == "json" else None, options={"num_ctx": 2048, "temperature": 0.1})
                 return {"response": response.get("response", "{}")}
-            except Exception as e:
-                logger.error(f"❌ Erreur Ollama : {e}")
-                return {"response": "{}"}
+        except Exception: return {"response": "{}"}
 
     def _clean_json(self, raw_resp: str) -> Dict:
         try:
@@ -80,8 +82,7 @@ class ArchitectureComposer:
     def load_registry(self) -> List[FSMRequirement]:
         path = Path("data/fsm_registry.json")
         if not path.exists(): return []
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        with open(path, "r", encoding="utf-8") as f: data = json.load(f)
         reqs = []
         for d in data:
             state_val = d.pop("state")
@@ -91,18 +92,17 @@ class ArchitectureComposer:
         return reqs
 
     async def assemble_baseline(self, audited_requirements: List[FSMRequirement]) -> TechnicalBaseline:
-        factory_logger.log_event("PHASE_3", "START", "Certification Baseline.")
-        final_set = [r for r in audited_requirements if r.state in [RequirementState.CLEAN, RequirementState.NORMALIZED]]
-        
-        if not final_set:
-            logger.warning("⚠️ Aucune exigence validée à certifier.")
-            return None
+        final_set = [r for r in audited_requirements if r.state in [RequirementState.CLEAN, RequirementState.NORMALIZED] and len(r.source_quote) > 5]
+        if not final_set: return None
 
-        # 1. MoSCoW
-        moscow_data = await self._construct_moscow(final_set)
-        # 2. Scoring
+        moscow_data = {"Must": [], "Should": [], "Could": [], "Won't": []}
+        batch_size = 10
+        for i in range(0, min(len(final_set), 50), batch_size):
+            batch = final_set[i:i+batch_size]
+            partial_moscow = await self._construct_moscow(batch)
+            for key in moscow_data: moscow_data[key].extend(partial_moscow.get(key, []))
+
         integrity_data = await self._scoring_integrity(moscow_data)
-
         serializable_reqs = []
         for r in final_set:
             r.transition_to(RequirementState.BASELINE, "Certification finale")
@@ -125,8 +125,7 @@ class ArchitectureComposer:
 
     def _export_json(self, baseline: TechnicalBaseline):
         output_path = Path("data/technical_baseline_alm.json")
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(asdict(baseline), f, indent=2, ensure_ascii=False)
+        with open(output_path, "w", encoding="utf-8") as f: json.dump(asdict(baseline), f, indent=2, ensure_ascii=False)
 
     def _export_markdown(self, baseline: TechnicalBaseline):
         output_path = Path("data/technical_baseline_final.md")
@@ -153,26 +152,23 @@ class ArchitectureComposer:
             quote = f"« {r.get('source_quote', 'N/A')} »"
             meta = f"P.{r['metadata'].get('page', '?')} ({r['metadata'].get('breadcrumbs', '?')})"
             md += f"| {r['uid'][:8]} | {babok} | {quote} | {meta} | {hist} |\n"
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(md)
+        with open(output_path, "w", encoding="utf-8") as f: f.write(md)
 
-    async def _construct_moscow(self, requirements: List[FSMRequirement]) -> Dict:
-        # On limite l'envoi au LLM pour éviter de saturer le contexte
-        req_texts = [{"id": r.uid[:5], "text": r.original_text[:100]} for r in requirements[:50]]
-        prompt = f"Expert MoSCoW: Priorise ces exigences JSON (Must, Should, Could, Won't) : {json.dumps(req_texts)}"
+    async def _construct_moscow(self, batch: List[FSMRequirement]) -> Dict:
+        req_texts = [{"id": r.uid[:5], "text": r.source_quote} for r in batch]
+        prompt = f"Expert MoSCoW: Classe ces exigences techniques en JSON (Must, Should, Could, Won't) : {json.dumps(req_texts)}"
         resp = await self._call_llm(prompt=prompt, format="json")
         return self._clean_json(resp.get("response", "{}"))
 
     async def _scoring_integrity(self, matrix_data: Dict) -> Dict:
-        prompt = f"Expert TOGAF: Score l'intégrité (1-5) JSON : {json.dumps(matrix_data)}"
+        prompt = f"Expert TOGAF: Analyse la cohérence de cette matrice et donne un score (1-5) JSON : {json.dumps(matrix_data)}"
         resp = await self._call_llm(prompt=prompt, format="json")
         return self._clean_json(resp.get("response", "{}"))
 
 async def main():
     composer = ArchitectureComposer()
     audited_reqs = composer.load_registry()
-    if audited_reqs:
-        await composer.assemble_baseline(audited_reqs)
+    if audited_reqs: await composer.assemble_baseline(audited_reqs)
 
 if __name__ == "__main__":
     asyncio.run(main())
