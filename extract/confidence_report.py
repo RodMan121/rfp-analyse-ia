@@ -46,7 +46,8 @@ def audit_ingestion(store: VectorStore, image_dir: Path) -> dict:
         try:
             response = ollama.generate(model=TEXT_MODEL, prompt=prompt, format="json")
             data = json.loads(response.get('response', '{}'))
-            data["nom"] = cat; data["nb_fragments"] = len(fragments)
+            data["nom"] = cat
+            data["nb_fragments"] = len(fragments)
             rapport["categories"].append(data)
 
             if data.get("confiance") == "FAIBLE":
@@ -86,7 +87,8 @@ def audit_gap_analysis(rfp_store: VectorStore, catalog_store: VectorStore) -> li
                 # 1. Extraction exigence
                 r1 = ollama.generate(model=TEXT_MODEL, prompt=f"Extrais exigence en JSON : {frag['text'][:800]}", format="json")
                 req = json.loads(r1.get('response', '{}'))
-                req['source'] = f"{frag['metadata']['breadcrumbs']} (P.{frag['metadata']['page']})"; req['categorie'] = cat
+                req['source'] = f"{frag['metadata']['breadcrumbs']} (P.{frag['metadata']['page']})"
+                req['categorie'] = cat
 
                 # 2. Match catalogue
                 know_how = catalog_store.search_hybrid(query=req.get('exigence', ''), n_results=3)
@@ -96,7 +98,11 @@ def audit_gap_analysis(rfp_store: VectorStore, catalog_store: VectorStore) -> li
                 r2 = ollama.generate(model=TEXT_MODEL, format="json", prompt=f"EXIGENCE : {req.get('exigence')}\nSAVOIR-FAIRE : {context}\n" \
                              "Réponds en JSON : {\"statut\": \"...\", \"score_confiance\": 0, \"justification\": \"...\", \"incertitude\": \"...\"}")
                 gap = json.loads(r2.get('response', '{}'))
-                req.update(gap); results.append(req)
+                
+                # Correction audit : copie pour éviter mutation
+                result = {**req}
+                result.update(gap)
+                results.append(result)
             except Exception as e:
                 logger.warning(f"⚠️ Erreur gap : {e}")
     return results
@@ -110,7 +116,8 @@ def generate_markdown_report(ingestion: dict, gap: list, rfp_name: str) -> str:
     
     if ingestion["questions_humain"]:
         rapport += "\n### ❓ Questions bloquantes\n"
-        for i, q in enumerate(ingestion["questions_humain"], 1): rapport += f"{i}. **[{q['categorie']}]** {q['question']}\n"
+        for i, q in enumerate(ingestion["questions_humain"], 1):
+            rapport += f"{i}. **[{q['categorie']}]** {q['question']}\n"
 
     rapport += "\n---\n## PARTIE 2 — Gap Analysis\n\n| Statut | Confiance | Exigence | Justification |\n|---|---|---|---|\n"
     for r in gap:
@@ -119,10 +126,17 @@ def generate_markdown_report(ingestion: dict, gap: list, rfp_name: str) -> str:
     return rapport
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(); parser.add_argument("--rfp", required=True); args = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--rfp", required=True)
+    args = parser.parse_args()
+    
     rfp_s = VectorStore(db_path=DEFAULT_DB, collection_name="rfp_hierarchical")
     cat_s = VectorStore(db_path=DEFAULT_DB, collection_name="service_catalog")
+    
     ing = audit_ingestion(rfp_s, Path(DEFAULT_IMAGES))
     gap = audit_gap_analysis(rfp_s, cat_s)
-    with open("data/confidence_report.md", "w", encoding="utf-8") as f: f.write(generate_markdown_report(ing, gap, args.rfp))
+    
+    with open("data/confidence_report.md", "w", encoding="utf-8") as f:
+        f.write(generate_markdown_report(ing, gap, args.rfp))
+    
     logger.success("✅ Rapport généré.")

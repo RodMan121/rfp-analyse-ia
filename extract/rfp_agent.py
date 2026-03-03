@@ -34,7 +34,7 @@ class RFPAgent:
         self.text_model = os.getenv("OLLAMA_TEXT_MODEL", "qwen2.5:7b")
         self.vision_model = os.getenv("OLLAMA_VISION_MODEL", "llama3.2-vision")
         
-        self.image_dir = Path("data/output_images")
+        self.image_dir = Path(os.getenv("OUTPUT_IMAGE_DIR", "data/output_images"))
         self.history = []
         self.last_mode = "TEXT"
         
