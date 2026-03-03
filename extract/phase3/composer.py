@@ -124,6 +124,12 @@ class ArchitectureComposer:
         for i in range(0, min(len(final_set), 100), batch_size):
             batch = final_set[i:i+batch_size]
             partial_moscow = await self._construct_moscow(batch)
+            if isinstance(partial_moscow, list) and len(partial_moscow) > 0:
+                partial_moscow = partial_moscow[0]
+            
+            if not isinstance(partial_moscow, dict):
+                partial_moscow = {}
+
             for key in moscow_data:
                 items = partial_moscow.get(key, [])
                 cleaned_items = [it["text"] if isinstance(it, dict) else it for it in items]
