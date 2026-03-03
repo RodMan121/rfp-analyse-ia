@@ -1,57 +1,51 @@
-# 🏭 Augmented BID IA — Votre Assistant Privé pour Appels d'Offres
+# 🏭 Augmented BID IA — Votre Expert en Appels d'Offres
 
 > 💡 **Nouveau sur le projet ?** Lisez notre [📖 Guide complet du fonctionnement](GUIDE_COMPLET.md) pour tout comprendre en 5 minutes.
 
-**Imaginez un expert qui lit 500 pages de documents techniques en 2 minutes, repère toutes les obligations cachées, et vérifie si votre entreprise sait y répondre. Le tout, sans jamais envoyer vos données confidentielles sur Internet.**
-
-C'est exactement ce que fait **Augmented BID IA**.
+**Imaginez un expert qui lit 500 pages de documents techniques en 2 minutes, repère toutes les obligations cachées, traque les clauses ambiguës et vérifie si votre entreprise sait y répondre. Le tout, 100% localement.**
 
 ---
 
-## 🌟 Pourquoi ce projet est-il "Magique" ?
+## 🌟 Pourquoi ce projet est-il unique ?
 
-Si vous utilisez ChatGPT, vous envoyez vos documents chez OpenAI. Ici, le "cerveau" de l'IA est **dans votre ordinateur**.
-
-| Ce que vous avez aujourd'hui | Ce que l'outil vous apporte |
-|:---:|:---:|
-| "Ctrl+F" pour chercher des mots exacts | Une recherche par **idées** (ex: cherche "Argent" -> trouve "Budget") |
-| Des heures à lister les exigences | Une **Matrice de Conformité** générée en un clic |
-| Le risque de fuite de données | Une **confidentialité totale** (100% local) |
-| L'oubli des schémas techniques | Une IA qui **"regarde"** vos images et schémas |
+| RAG CLASSIQUE              |   AUGMENTED BID IA
+|---------------------------|----------------------------------
+| "Cherche dans le texte"    |   "Analyse (BABOK) + Vérifie (ISO 25010)"
+| "Donne une réponse"        |   "Traque les pièges (Radar à Loups)"
+| "Texte uniquement"         |   "Analyse aussi les Schémas & Photos"
+| "Amnésique"                |   "Mémoire de conversation intelligente"
 
 ---
 
-## 🚀 Guide de démarrage (Le 1-2-3 facile)
+## 🚀 Guide d'Utilisation Rapide (Le 1-2-3-4)
 
-### Étape 1 : Apprendre le document à l'IA
-Mettez votre PDF dans le dossier `data/input/` et lancez cette commande :
+### 1. Indexation (Apprentissage)
+Apprenez à l'IA ce qu'elle doit analyser (le RFP) et ce que vous savez faire (votre catalogue).
 ```bash
-./venv/bin/python extract/main.py --input data/input/votre_document.pdf
+./venv/bin/python extract/main.py --input data/input/mon_rfp.pdf
 ```
-*L'IA découpe le document en milliers de fiches intelligentes et les range dans sa bibliothèque.*
 
-### Étape 2 : Vérifier la qualité
-L'IA a-t-elle bien "lu" ? Demandez-lui son rapport d'auto-critique :
+### 2. Audit Granulaire (Stratégique ✨)
+Traquez les ambiguïtés et les manques techniques du client.
 ```bash
-./venv/bin/python extract/confidence_report.py --rfp "votre_document.pdf"
+./venv/bin/python extract/granular_audit.py --cat TECHNIQUE
 ```
-*Consultez `data/confidence_report.md` : l'IA vous avoue ce qu'elle n'a pas bien compris.*
+➡️ Rapport disponible dans : `data/granular_audit_report.md`
 
-### Étape 3 : Poser vos questions (La Méthode Facile ✨)
-1. Ouvrez le fichier **`data/prompt.md`** avec un bloc-notes.
-2. Écrivez votre question (ex: "Fais-moi un résumé des pénalités de retard").
-3. Lancez : `./venv/bin/python extract/rfp_agent.py`
-*La réponse s'affiche en direct, comme si l'IA vous parlait.*
+### 3. Analyse Métier (Gap Analysis)
+Générez la matrice de conformité automatique entre le client et vous.
+```bash
+./venv/bin/python extract/phase2/compliance.py
+```
+➡️ Rapport disponible dans : `data/gap_analysis_report.md`
+
+### 4. Dialogue Expert (Méthode Simple)
+Posez vos questions complexes dans `data/prompt.md` et lancez l'agent :
+```bash
+./venv/bin/python extract/rfp_agent.py
+```
 
 ---
 
-## 📂 Où sont mes fichiers ?
-
-- `extract/` : Le moteur (les câbles et les engrenages).
-- `data/input/` : Déposez vos PDF ici.
-- `data/gap_analysis_report.md` : Votre tableau de conformité final.
-
----
-
-🔒 **Confidentialité** : Ce système est un coffre-fort. Rien ne sort de votre PC.
-*(Pour les techniciens, les détails sont dans [ARCHITECTURE.md](ARCHITECTURE.md))*
+🔒 **Confidentialité** : Ce système tourne **100% en local**. Rien n'est envoyé sur internet.
+*(Architecture détaillée dans [ARCHITECTURE.md](ARCHITECTURE.md))*

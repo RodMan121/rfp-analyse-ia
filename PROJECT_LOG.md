@@ -1,22 +1,20 @@
 # 📓 Journal de Bord : Augmented BID IA
 
 ## ✅ Étapes franchies (Fait !)
-- **Phase 1 : Ingestion**
-    - [x] Découpage intelligent des PDF (IBM Docling).
-    - [x] Bibliothèque magique sémantique (ChromaDB).
-    - [x] Recherche de mots-clés exacts (BM25).
-    - [x] Fusion des deux recherches (RRF).
-- **Phase 2 : Analyse & Audit**
-    - [x] Agent qui répond en direct (Streaming).
-    - [x] Analyse des schémas et images (Vision).
-    - [x] Comparaison client vs nous (Gap Analysis).
-    - [x] Rapport sur la qualité de l'IA (Confidence Report).
-    - [x] Pilotage facile par fichier Markdown (`data/prompt.md`).
+- **Phase 1 : Ingestion & RAG Hybride**
+    - [x] Découpage Docling + Recherche RRF (Vecteurs + BM25).
+- **Phase 2 : Audit & Conformité**
+    - [x] Gap Analysis automatique (Matrice GTM).
+- **Phase 2.1 : Analyse Granulaire (Micro-Agents) ✨**
+    - [x] **Agent BABOK** : Normalisation atomique.
+    - [x] **Radar à Loups** : Détection des ambiguïtés.
+    - [x] **Agent Complétude** : Inférence ISO 25010.
+    - [x] **Granular Audit Script** : Orchestration et Rapport Markdown.
 
-## 🚀 Prochaines étapes (À faire)
-- [ ] Interface visuelle dans votre navigateur (Streamlit).
-- [ ] Création automatique de tableaux Excel.
-- [ ] Comparaison de plusieurs appels d'offres en même temps.
+## 🚀 Prochaines étapes
+- [ ] Interface Streamlit (Visualisation Dashboard).
+- [ ] Multi-RFP Comparison (Vue croisée).
+- [ ] Export Excel natif (Pandas).
 
 ---
 *Dernière mise à jour : 3 mars 2026*

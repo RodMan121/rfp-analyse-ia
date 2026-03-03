@@ -1,26 +1,19 @@
-# 🤖 Contexte pour l'IA (Instructions de Développement V2.2)
+# 🤖 Contexte pour l'IA (Instructions de Développement V2.1)
 
 Ce fichier est destiné aux agents IA (Cursor, Windsurf, Gemini) travaillant sur ce projet.
 
 ## 🏗️ Principes Architecturaux
-- **Hybrid-First** : La recherche doit toujours combiner Vecteurs (ChromaDB) et Mots-clés (BM25) via l'algorithme **RRF (Reciprocal Rank Fusion)**.
-- **Robustesse ID** : Les IDs de fragments dans ChromaDB sont des hash MD5 (`hashlib.md5`) basés sur le contenu pour éviter les collisions lors d'ingestions multiples.
-- **Cache de Fragments** : Utiliser `.fragments.json` avec validation par date de modification (`st_mtime`) pour éviter le re-parsing inutile.
-- **Parallélisme** : La Gap Analysis supporte le multi-threading via `OLLAMA_NUM_PARALLEL`.
+- **Hybrid Search RRF** : Toujours utiliser la fusion Vecteurs + BM25 pour la précision.
+- **Micro-Agents Determinism** : Pour l'analyse stratégique, utiliser la chaîne de montage : `BABOK -> WOLF -> ISO`.
+- **Local-First** : Priorité absolue aux modèles Ollama locaux.
 
-## 🛠️ Stack Technique & Modèles
-- **Extraction Locale** : IBM Docling (Parsing hiérarchique).
-- **Extraction Multimodale** : Gemini 2.0 Flash (avec logique de `tenacity.retry`).
-- **LLM Raisonnement** : Ollama `qwen2.5:7b`.
-- **Vision Cognitive** : Ollama `llama3.2-vision`.
-- **Reranking** : FlashRank (`ms-marco-MiniLM-L-12-v2`).
-
-## 🎯 Backlog d'Optimisation
-1.  **Parallélisation Gemini** : Permettre le parsing de plusieurs documents simultanément.
-2.  **Streaming Vision** : Explorer les capacités de streaming pour les modèles multimodaux Ollama.
-3.  **Filtrage par Hash** : Implémenter une vérification de contenu identique avant indexation pour économiser de l'espace.
+## 🛠️ Stack Technique & Micro-Agents
+- **Agent BABOK** : Normalisation atomique (`extract/phase2/micro_agents.py`).
+- **Agent Radar à Loups** : Calcul de l'ambiguïté.
+- **Agent de Complétude** : Inférence ISO 25010.
+- **Orchestration** : `extract/granular_audit.py`.
 
 ## ⚠️ Vigilance Code
-- **Type Safety** : Toujours utiliser les Type Hints Python.
-- **Exceptions** : Jamais de `bare except:`. Utiliser `except Exception:` ou des exceptions ciblées.
-- **PEP8** : Pas de points-virgules `;`. Une instruction par ligne.
+- **JSON Formatting** : Les Micro-Agents attendent des réponses JSON strictes.
+- **Race Conditions** : La Gap Analysis est parallélisée, attention aux accès concurrents sur les ressources partagées (bien que ChromaDB gère cela).
+- **PEP8** : Pas de points-virgules, typage statique obligatoire.
