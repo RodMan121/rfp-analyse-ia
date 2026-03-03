@@ -1,41 +1,51 @@
-# 🔰 Guide Débutant : La Méthode Augmented BID
+# 🔰 Guide Débutant : L'Usine à Appels d'Offres
 
-Bienvenue ! Ce guide vous explique comment l'IA transforme un document complexe en une liste de tâches précises en deux étapes : **Dissocier** et **Traiter**.
-
----
-
-## 🏗️ Phase 1 : Dissocier (Le Puzzle)
-
-Imaginez que vous recevez un immense château en LEGO déjà construit (votre PDF de 500 pages). Pour comprendre comment il est fait, vous devez le démonter proprement.
-
-1.  **Démontage** : L'IA sépare chaque brique (paragraphes, tableaux).
-2.  **Étiquetage** : Chaque brique reçoit une étiquette : "C'est de la Sécurité", "C'est du Prix", etc.
-3.  **Ancrage** : On note exactement d'où vient chaque brique. Impossible pour l'IA d'inventer une pièce qui n'existait pas dans le château d'origine !
+Bienvenue ! Ce guide explique comment l'IA ne se contente plus de lire vos documents, mais les traite comme dans une véritable usine.
 
 ---
 
-## 🔬 Phase 2 : Traiter (La Chaîne de Montage)
+## 🏭 Le Concept : L'Usine en 3 Ateliers
 
-Une fois les briques séparées, elles passent par trois ateliers spécialisés pour être vérifiées :
+Oubliez le concept du "Chatbot" (type ChatGPT) à qui vous posez des questions. Ici, nous avons construit une **Chaîne de Montage**.
 
-### 🛠️ Atelier 1 : Le Traducteur (BABOK)
-Il réécrit les phrases floues. 
-*   *Exemple* : "L'accès doit être protégé" devient "Le Système doit Authentifier l'Utilisateur". On sait enfin **qui** fait **quoi**.
+### 1. Atelier de Découpage (La Dissociation)
+Vous donnez un gros document PDF à l'usine. Les machines le découpent en centaines de petits paragraphes.
+*   **Le truc malin :** Chaque paragraphe reçoit un "Code Barre" unique (un hash MD5). Impossible pour l'IA d'inventer une phrase qui n'existe pas, car on garde toujours la trace de son code barre.
 
-### 🐺 Atelier 2 : Le Chasseur de Loups (Radar à Loups)
-Il traque les mots "pièges" comme *rapide*, *moderne* ou *efficace*.
-*   *Action* : Si une brique est trop floue, il met un carton rouge 🚩. Vous devez demander des précisions au client.
+### 2. Atelier de Traitement (Les Micro-Agents)
+Chaque paragraphe passe ensuite sur un tapis roulant où trois "Robots Experts" l'analysent :
+*   **Le Robot BABOK** : Il réécrit les phrases floues du client en vraies spécifications techniques.
+*   **Le Radar à Loups** : Il cherche les mots dangereux (*"rapide", "efficace"*). S'il en trouve un, il met un feu rouge 🛑 (l'exigence est bloquée).
+*   **Le Robot ISO** : Il vérifie ce que le client a oublié de dire (ex: "Vous parlez de paiement, mais pas de sécurité !").
 
-### 🛡️ Atelier 3 : Le Gardien (ISO 25010)
-Il devine ce que le client a oublié de dire.
-*   *Action* : Si vous parlez de "Stocker des données", il demande : "Et comment on les supprime ?". Il évite les mauvaises surprises plus tard.
-
----
-
-## 🚀 Pourquoi cette méthode est-elle la meilleure ?
-
-En utilisant cette logique de **Dissociation** et de **Traitement Granulaire**, vous ne faites plus de l'approximation. Vous faites de l'**ingénierie de réponse**. Vous éliminez les risques contractuels et vous gagnez un temps précieux.
+### 3. Atelier d'Assemblage (La Synthèse)
+L'usine récupère uniquement les paragraphes qui ont reçu un "Feu Vert" au deuxième atelier. Elle les assemble pour créer votre livrable final : une **Baseline Technique** propre, chiffrable et sans risque.
 
 ---
 
-🔒 **Confidentialité** : Ce système est votre coffre-fort personnel. Rien ne sort de votre ordinateur.
+## 🚦 Comment utiliser l'usine ?
+
+Vous êtes le chef d'atelier. Voici vos 3 commandes :
+
+1.  **Démarrer les machines (Ingestion)** :
+    Vous mettez le PDF dans `data/input/` et vous lancez :
+    `python extract/main.py --input data/input/mon_document.pdf`
+
+2.  **Lancer le tapis roulant (Audit Granulaire)** :
+    Vous dites aux robots d'inspecter les pièces :
+    `python extract/granular_audit.py`
+    *(Vous lisez ensuite le rapport pour voir quelles pièces ont eu un feu rouge).*
+
+3.  **Emballer le produit final (Synthèse)** :
+    Vous générez le tableau Excel / Markdown :
+    `python extract/phase3/composer.py`
+
+---
+
+## 🕵️ Et si je veux juste discuter avec mon document ?
+Si vous avez besoin de comprendre pourquoi un point est bloqué, vous pouvez toujours utiliser le vieux système de "Chatbot" pour enquêter :
+`python extract/rfp_agent.py "Pourquoi ce point est bloqué ?"`
+
+---
+
+🔒 **Votre Sécurité** : Cette usine est construite **dans votre ordinateur**. Aucune donnée confidentielle ne sort par les tuyaux d'internet.

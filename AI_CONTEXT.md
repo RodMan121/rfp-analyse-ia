@@ -1,19 +1,19 @@
-# 🤖 Contexte pour l'IA (Instructions de Développement V2.1)
+# 🤖 Contexte pour l'IA (Instructions de Développement V3.0)
 
-Ce fichier définit les règles d'or pour le développement futur du projet.
+Ce fichier définit les règles d'or pour tout futur développement sur ce projet.
 
-## 🏗️ Principes de Développement
-- **Chain of Thought (CoT)** : Les analyses métier doivent passer par une chaîne de micro-agents (`BABOK -> WOLF -> ISO`).
-- **Déterminisme** : Transformer le langage naturel flou en structures Sujet/Action/Objet.
-- **Local-First** : Priorité absolue aux modèles Ollama (Qwen 2.5).
+## 🏗️ Architecture FSM-Driven (Strict)
+Ce projet n'est pas un système RAG classique, c'est une **Machine à État Finis (FSM)**.
+- Le cycle de vie d'une exigence est unidirectionnel : `RAW` ➔ `CLASSIFIED` ➔ `NORMALIZED` ➔ `CLEAN` ➔ `AUDITED` ➔ `BASELINE`.
+- **Règle de Sûreté :** Ne jamais forcer la transition vers `CLEAN` si l'ambiguïté est > 0. Le blocage est une *feature*, pas un bug.
 
-## 🔬 Les 3 Micro-Agents (Phase 2.1)
-1.  **Agent BABOK** : Normalisation structurelle (Sujet, Action, Objet, Contrainte).
-2.  **Agent Radar à Loups** : Calcul du score d'ambiguïté (0-100) et détection des termes qualitatifs.
-3.  **Agent ISO 25010** : Inférence sur les fonctionnalités implicites manquantes (Sécurité, Archivabilité, etc.).
+## ⚙️ Méthodologie "Dissocier, Traiter, Associer"
+- **Dissocier (Phase 1)** : Ancrage MD5 strict obligatoire. Ne jamais muter un fragment brut une fois stocké en base.
+- **Traiter (Phase 2)** : Utilisation exclusive du pattern **Micro-Agents** via héritage de la classe de base `FSMAgent`. Chaque agent fait *une* seule chose.
+- **Associer (Phase 3)** : Le rendu final (Technical Baseline) doit être sérialisable (JSON/Markdown) et prêt pour une injection dans un outil ALM.
 
-## ⚠️ Standards Techniques
-- **JSON Robustness** : Utiliser `_clean_json_response` pour extraire les données des réponses LLM.
-- **Type Safety** : Utiliser `dataclasses` et Type Hints Python.
-- **Robustness** : Jamais de `bare except:`. Logging systématique avec `loguru`.
-- **PEP8** : Une instruction par ligne, pas de `;`.
+## 🛠️ Stack & Standards Techniques
+- **LLM Local** : Modèles Ollama (`qwen2.5:7b`).
+- **Data Integrity** : `dataclasses` obligatoires pour la manipulation de données. Mutation en place interdite (travailler sur des copies).
+- **JSON Handling** : Toujours utiliser `_clean_json_response()` pour parser les retours LLM (qui contiennent souvent du Markdown indésirable).
+- **PEP8** : Respect strict, aucun point-virgule. Logging via `loguru`.

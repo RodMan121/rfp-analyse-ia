@@ -1,47 +1,67 @@
-# 🏗️ Architecture Technique : Gestion des Flux et Cycle de Vie
+# 🏗️ Architecture Déterministe : FSM-Driven Engine
 
-Ce document détaille la transformation des fichiers d'entrée en produits de sortie immuables.
-
----
-
-## 📥 Les Entrées (Single Source of Truth)
-
-### 1. Dossier `data/input/`
-Le système est conçu pour traiter des PDF complexes. 
-- **Intégrité :** Le PDF d'origine n'est jamais modifié.
-- **Multi-source :** Vous pouvez mélanger RFP client et catalogues internes en utilisant le paramètre `--collection`.
-
-### 2. Fichier `data/prompt.md`
-Utilisé par l'Agent QA (`rfp_agent.py`) pour des requêtes complexes.
-- **Rôle :** Permet de structurer des prompts multi-lignes, incluant des exemples ou des contraintes de formatage pour l'IA.
+Ce document décrit l'organisation de l'Usine à RFP, construite sur une Machine à État Finis (FSM) pour garantir la sûreté de fonctionnement et l'auditabilité.
 
 ---
 
-## 📤 Les Sorties (Technical Artifacts)
+## 📊 1. Modèle Conceptuel (L'Usine en 3 Phases)
 
-### 1. Vision : `data/output_images/`
-Lors de la Phase 1 (Dissocier), Docling extrait chaque page en PNG.
-- **Utilité :** Ces images servent de "preuve visuelle" pour le modèle **Llama 3.2 Vision**. L'agent s'y réfère pour analyser les diagrammes ou les tableaux complexes.
+Le système est conçu pour transformer un document flou en une "Technical Baseline" exploitable. 
 
-### 2. Cache : `data/output_json/`
-Contient les fichiers `.fragments.json`.
-- **Rôle :** Stocke la décomposition structurelle (titres, paragraphes, métadonnées).
-- **Vérification de fraîcheur :** Le système compare la date du PDF avec celle du JSON. Si le PDF change, le cache est invalidé.
-
-### 3. Rapports Stratégiques (`.md`)
-- **`granular_audit_report.md` :** Sortie de la Phase 2. Met en évidence les risques sémantiques (loups) et les suggestions ISO 25010.
-- **`gap_analysis_report.md` :** Synthèse métier. Compare les exigences validées avec votre savoir-faire.
-
-### 4. Database : `data/chroma_db_hierarchical/`
-La base vectorielle ChromaDB.
-- **ID MD5 :** Chaque fragment est scellé par un ID unique calculé sur son contenu.
-- **États FSM :** La base stocke l'état courant de l'exigence (`RAW` ➔ `BASELINE`).
-
----
-
-## 📊 Résumé de la Transformation
-
-```text
-[PDF Brut] ➔ [PNG + JSON Cache] ➔ [Vecteurs ChromaDB] ➔ [Rapports Markdown]
-   (RAW)          (CLASSIFIED)         (NORMALIZED)          (BASELINE)
+```mermaid
+graph TD
+    subgraph "PHASE 1 : Dissocier"
+        A[📄 Document Brut] -->|Docling| B(🧩 Fragments Atomiques)
+        B -->|Hash MD5| C[(🗄️ Base Immuable)]
+    end
+    
+    subgraph "PHASE 2 : Traiter (FSM)"
+        C -->|Agent BABOK| D{NORMALIZED}
+        D -->|Agent Radar| E{CLEAN}
+        E -->|Agent ISO| F{AUDITED}
+        E -.->|Score > 0| G[🚩 STALLED]
+    end
+    
+    subgraph "PHASE 3 : Associer"
+        F -->|MoSCoW & TOGAF| H[📦 TECHNICAL BASELINE]
+    end
 ```
+
+---
+
+## 🔬 2. Cycle de Vie de l'Exigence (FSM)
+
+Chaque fragment d'information est un objet `FSMRequirement` qui transite entre des états stricts :
+
+| État Cible | Agent Responsable | Condition de Transition |
+|---|---|---|
+| **RAW** | `DoclingDecomposer` | Extraction structurelle réussie. |
+| **CLASSIFIED** | `SemanticRouter` | Contexte métier affecté (ex: Sécurité). |
+| **NORMALIZED** | `BABOKAgent` | Validation du format `Sujet + Action + Objet`. |
+| **CLEAN** | `WolfRadarAgent` | **Score d'ambiguïté = 0** (Aucun adjectif flou). |
+| **AUDITED** | `CompletenessAgent` | Inférence ISO 25010 effectuée (Gap Tickets générés). |
+| **BASELINE** | `ArchitectureComposer` | Intégration dans le rendu ALM final. |
+
+### 🛑 Logique de Blocage (Fail-Safe)
+Si l'agent Radar détecte un terme qualitatif non mesurable (*"ergonomique, rapide, moderne"*), il **refuse** la transition vers l'état `CLEAN`. L'exigence est marquée comme `STALLED` et exclue de la Baseline jusqu'à intervention humaine.
+
+---
+
+## 🧠 3. Moteur de Recherche Hybride (RRF)
+
+Pour le Retrieval (RAG), nous fusionnons deux index :
+1.  **ChromaDB (Vectoriel)** : Embeddings pour le contexte sémantique.
+2.  **BM25 (Textuel)** : Fréquence de termes pour les acronymes exacts (ISO 27001).
+
+**Formule Reciprocal Rank Fusion (RRF)** :
+`Score(d) = Σ (1 / (k + Rang(d, moteur)))`
+*Avec une constante k=60. Ce qui garantit que seuls les fragments pertinents dans les deux domaines remontent à l'IA.*
+
+---
+
+## 🛠️ 4. Stack Technique & Immuabilité
+
+- **Identifiants Déterministes** : Chaque fragment possède un ID `hashlib.md5(source + page + texte)`.
+- **Dédoublonnage** : L'API ChromaDB utilise `.upsert()`. Une ré-ingestion du même PDF est idempotente.
+- **Micro-Services** : Chaque Agent hérite d'une classe de base `FSMAgent`, permettant une composition de pipeline à la volée.
+- **Orchestration LLM** : Ollama (`qwen2.5:7b`) avec `ThreadPoolExecutor` (pilotable via `OLLAMA_NUM_PARALLEL`).
