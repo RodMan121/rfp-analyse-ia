@@ -187,8 +187,14 @@ class BABOKAgent(FSMAgent):
             return req
 
         id_re = self._id_re if self._id_re else _REQUIREMENT_ID_RE
-        id_match = id_re.search(text) if id_re else None
-        official_id = id_match.group(1) if id_match else None
+        official_id = None
+        if id_re:
+            id_match = id_re.search(text)
+            if id_match:
+                try:
+                    official_id = id_match.group(1)
+                except IndexError:
+                    official_id = id_match.group(0)
 
         ctx_block = self.doc_context.build_babok_prompt_context() if self.doc_context else ""
         is_req_hint = self.doc_context.build_is_requirement_hint() if self.doc_context else "is_real_requirement = false si pas d'obligation claire."

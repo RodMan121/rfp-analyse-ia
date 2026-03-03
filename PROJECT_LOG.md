@@ -23,6 +23,7 @@
 ### 🛠️ Maintenance & Qualité (Ingénierie)
 - [x] Audit Qualité complet (Mars 2026).
 - [x] Migration vers standard PEP8 avec `Ruff`.
+- [x] **Correctifs Industriels** : Migration Docling v2 (`iterate_items`, `get_image`), robustesse des IDs officiels, et gestion des imports `os`/`time`.
 - [x] **Audit v11** : Remise à niveau industrielle (Filtre anti-bruit regex, ancrage BN-XXX, dédoublonnage sémantique).
 - [x] **Refonte Asynchrone (asyncio)** : Pipeline complet (`harvester` & `composer`) en mode asynchrone pour la performance.
 - [x] **Optimisation VRAM** : Pilotage du contexte (`num_ctx`) et de la concurrence pour GPU 4 Go.

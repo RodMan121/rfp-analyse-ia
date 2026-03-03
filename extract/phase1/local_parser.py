@@ -1,6 +1,7 @@
 import os
 import re
 import hashlib
+import time
 from pathlib import Path
 from loguru import logger
 from typing import List, Dict, Any, Optional
@@ -8,6 +9,7 @@ from dataclasses import dataclass
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
+from docling_core.types.doc.document import PictureItem, TextItem, SectionHeaderItem
 
 # Import optionnel du contexte documentaire (évite import circulaire)
 try:
@@ -72,7 +74,8 @@ class LocalParser:
         
         # ACTIVER L'EXTRACTION D'IMAGES (Maquettes, schémas)
         pipeline_options.images_scale = 2.0  # Haute résolution pour les maquettes
-        pipeline_options.generate_pictures = True
+        pipeline_options.generate_picture_images = True
+        pipeline_options.do_picture_classification = True
         
         self.converter = DocumentConverter(
             format_options={
@@ -96,40 +99,43 @@ class LocalParser:
         decompositions = []
         title_stack = []
 
-        for item, level in doc.iterate_sections():
-            label = item.label.lower()
+        # Utilisation de iterate_items pour Docling v2
+        for item, level in doc.iterate_items():
+            label = getattr(item, "label", "text").lower()
             category = "GENERAL"
             text_clean = ""
             image_path = None
 
             try:
                 # 1. TRAITEMENT DU TEXTE
-                raw_text = item.text if hasattr(item, "text") else ""
+                raw_text = getattr(item, "text", "")
                 text_clean = raw_text.strip()
 
                 # 2. TRAITEMENT DES IMAGES (Maquettes / Schémas)
-                if label in ["picture", "figure"] and hasattr(item, "image") and item.image:
-                    page_no = item.prov[0].page_no if item.prov else 0
-                    img_name = f"page_{page_no}_{hashlib.md5(text_clean.encode()).hexdigest()[:8]}.png"
-                    image_path = str(self.img_dir / img_name)
-                    
-                    item.image.save(image_path)
-                    logger.debug(f"📸 Image extraite : {img_name}")
-                    
-                    category = "IMAGE"
-                    text_clean = f"[IMAGE SOURCE: {img_name}] {text_clean}"
+                if isinstance(item, PictureItem):
+                    pil_img = item.get_image(doc)
+                    if pil_img:
+                        page_no = item.prov[0].page_no if item.prov else 0
+                        img_hash = hashlib.md5(text_clean.encode() if text_clean else str(time.time()).encode()).hexdigest()[:8]
+                        img_name = f"page_{page_no}_{img_hash}.png"
+                        image_path = str(self.img_dir / img_name)
+                        
+                        pil_img.save(image_path)
+                        logger.debug(f"📸 Image extraite : {img_name}")
+                        
+                        category = "IMAGE"
+                        text_clean = f"[IMAGE SOURCE: {img_name}] {text_clean or 'Schéma/Maquette sans légende'}"
 
-                # --- FIX v11 : Filtrage de bruit avec regex contextuelle ---
+                # Filtrage du bruit textuel (uniquement si ce n'est pas une image)
                 if category != "IMAGE":
                     if len(text_clean) < _MIN_CONTENT_LENGTH: continue
                     if self._noise_re.search(text_clean): continue
-                # -----------------------------------------------------------
 
             except Exception as e:
                 logger.error(f"⚠️ Erreur item : {e}")
                 continue
 
-            if "heading" in label or "title" in label:
+            if isinstance(item, SectionHeaderItem):
                 depth = level if level is not None else 0
                 title_stack = title_stack[:depth]
                 title_stack.append(text_clean)

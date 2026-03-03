@@ -1,3 +1,4 @@
+import os
 import chromadb
 import pickle
 import numpy as np
