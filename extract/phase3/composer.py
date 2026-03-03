@@ -44,12 +44,17 @@ class ArchitectureComposer:
         integrity_data = self._scoring_integrity(matrix_data)
         
         # Marquer la transition finale vers BASELINE
+        serializable_reqs = []
         for r in final_set:
             r.transition_to(RequirementState.BASELINE, "Intégration dans la Technical Baseline")
+            # Conversion manuelle pour éviter l'erreur de sérialisation de l'Enum
+            req_dict = asdict(r)
+            req_dict['state'] = r.state.value
+            serializable_reqs.append(req_dict)
 
         return TechnicalBaseline(
             project_uid=hashlib.md5(str(matrix_data).encode()).hexdigest()[:12] if 'hashlib' in globals() else "PROJ-V1",
-            validated_requirements=[asdict(r) for r in final_set],
+            validated_requirements=serializable_reqs,
             moscow_matrix=matrix_data.get("moscow", {}),
             integrity_score=integrity_data.get("score", 3)
         )
