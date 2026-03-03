@@ -1,26 +1,22 @@
-# 📓 Journal du Projet & État d'Avancement
+# 📓 Journal de Bord : Augmented BID IA
 
-## ✅ Phase 1 : Ingestion & Analyse (TERMINÉE)
-- [x] **Ingestion Hiérarchique** : Docling + Capture Visuelle.
-- [x] **Double Indexation** : ChromaDB (Vecteurs) + BM25 (Mots-clés).
-- [x] **Recherche Hybride** : Algorithme RRF (Reciprocal Rank Fusion).
-- [x] **Cache de Fragments** : Chargement instantané via `.fragments.json`.
-- [x] **IDs MD5** : Élimination des collisions d'indexation.
+## ✅ Étapes franchies (Fait !)
+- **Phase 1 : Ingestion**
+    - [x] Découpage intelligent des PDF (IBM Docling).
+    - [x] Bibliothèque magique sémantique (ChromaDB).
+    - [x] Recherche de mots-clés exacts (BM25).
+    - [x] Fusion des deux recherches (RRF).
+- **Phase 2 : Analyse & Audit**
+    - [x] Agent qui répond en direct (Streaming).
+    - [x] Analyse des schémas et images (Vision).
+    - [x] Comparaison client vs nous (Gap Analysis).
+    - [x] Rapport sur la qualité de l'IA (Confidence Report).
+    - [x] Pilotage facile par fichier Markdown (`data/prompt.md`).
 
-## ✅ Phase 2 : Audit & Conformité (TERMINÉE)
-- [x] **Agent de Conformité** : Extraction automatique des exigences client.
-- [x] **Gap Analysis** : Comparaison avec le catalogue de services.
-- [x] **Rapport de Confiance** : Audit de la qualité d'ingestion (IA Self-Audit).
-- [x] **Prompts Markdown** : Pilotage de l'agent via `data/prompt.md`.
-- [x] **Parallélisation** : Gap Analysis multi-threadée.
+## 🚀 Prochaines étapes (À faire)
+- [ ] Interface visuelle dans votre navigateur (Streamlit).
+- [ ] Création automatique de tableaux Excel.
+- [ ] Comparaison de plusieurs appels d'offres en même temps.
 
-## 🚀 Phase 3 : Interface & Accessibilité (EN COURS)
-- [ ] **Interface Streamlit** : Rendre l'outil utilisable par des non-développeurs.
-- [ ] **Dashboard de Conformité** : Vue d'ensemble graphique des ✅/⚠️/❌.
-- [ ] **Export Excel Pro** : Génération de la matrice GTM au format .xlsx.
-- [ ] **Multi-RFP Compare** : Comparer deux appels d'offres entre eux.
-
-## 🛠️ Maintenance & Dette Technique
-- [x] Migration PyPDF2 -> pypdf (v4).
-- [x] Centralisation config modèles dans `.env`.
-- [x] Logique de retry Gemini (Tenacity).
+---
+*Dernière mise à jour : 3 mars 2026*

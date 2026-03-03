@@ -1,58 +1,55 @@
-# 🏭 Augmented BID IA — Moteur de Conformité & Analyse RFP
+# 🏭 Augmented BID IA — Votre Assistant Privé pour Appels d'Offres
 
-Un système d'analyse d'Appels d'Offres (RFP) **100% local, multimodal** et orienté **"Gap Analysis"**. Ce projet transforme un document brut en une matrice d'exigences vérifiée par rapport à votre savoir-faire.
+**Imaginez un expert qui lit 500 pages de documents techniques en 2 minutes, repère toutes les obligations cachées, et vérifie si votre entreprise sait y répondre. Le tout, sans jamais envoyer vos données confidentielles sur Internet.**
 
----
-
-## 🌟 Pourquoi utiliser ce logiciel ?
-
-| FONCTIONNALITÉ              |   BÉNÉFICE MÉTIER
-|---------------------------|----------------------------------
-| **Recherche Hybride (RRF)** | Trouve les concepts flous ET les articles de loi exacts.
-| **Gap Analysis Automatique** | Détecte immédiatement vos écarts de conformité ✅/⚠️/❌.
-| **Vision Cognitive**        | Analyse les schémas, maquettes et diagrammes d'architecture.
-| **Audit de Confiance**      | L'IA s'auto-évalue pour garantir la fiabilité des données.
-| **Zéro Cloud (Ollama)**     | Confidentialité totale : vos documents ne sortent pas de votre PC.
+C'est exactement ce que fait **Augmented BID IA**.
 
 ---
 
-## 🚀 Guide d'Utilisation Rapide
+## 🌟 Pourquoi ce projet est-il "Magique" ?
 
-### 1. Indexation (Apprentissage)
-Apprenez à l'IA ce qu'elle doit analyser (le RFP) et ce que vous savez faire (votre catalogue).
+Si vous utilisez ChatGPT, vous envoyez vos documents chez OpenAI. Ici, le "cerveau" de l'IA est **dans votre ordinateur**.
 
+| Ce que vous avez aujourd'hui | Ce que l'outil vous apporte |
+|:---:|:---:|
+| "Ctrl+F" pour chercher des mots exacts | Une recherche par **idées** (ex: cherche "Argent" -> trouve "Budget") |
+| Des heures à lister les exigences | Une **Matrice de Conformité** générée en un clic |
+| Le risque de fuite de données | Une **confidentialité totale** (100% local) |
+| L'oubli des schémas techniques | Une IA qui **"regarde"** vos images et schémas |
+
+---
+
+## 🚀 Guide de démarrage (Le 1-2-3 facile)
+
+### Étape 1 : Apprendre le document à l'IA
+Mettez votre PDF dans le dossier `data/input/` et lancez cette commande :
 ```bash
-# Indexer le cahier des charges client
-./venv/bin/python extract/main.py --input data/input/mon_rfp.pdf
-
-# Indexer votre référentiel technique (Catalogue)
-./venv/bin/python extract/main.py --input data/input/notre_savoir_faire.pdf --collection service_catalog
+./venv/bin/python extract/main.py --input data/input/votre_document.pdf
 ```
+*L'IA découpe le document en milliers de fiches intelligentes et les range dans sa bibliothèque.*
 
-### 2. Audit & Gap Analysis
-Générez la matrice de conformité automatique et vérifiez la qualité.
+### Étape 2 : Vérifier la qualité
+L'IA a-t-elle bien "lu" ? Demandez-lui son rapport d'auto-critique :
 ```bash
-# Vérifier si l'IA a bien "lu" le document (Rapport de Confiance)
-./venv/bin/python extract/confidence_report.py --rfp "mon_rfp.pdf"
-
-# Lancer la Gap Analysis (Matrice GTM)
-./venv/bin/python extract/phase2/compliance.py
+./venv/bin/python extract/confidence_report.py --rfp "votre_document.pdf"
 ```
+*Consultez `data/confidence_report.md` : l'IA vous avoue ce qu'elle n'a pas bien compris.*
 
-### 3. Dialogue Expert (Méthode Simple ✨)
-Pour des questions complexes :
-1.  Éditez le fichier **`data/prompt.md`**.
-2.  Lancez l'agent sans argument : `./venv/bin/python extract/rfp_agent.py`
-
----
-
-## 📂 Structure du Code
-
-- `extract/phase1/` : **Le Bibliothécaire** (Parsing Docling/Gemini, Indexation RRF).
-- `extract/phase2/` : **L'Expert Métier** (Compliance, Gap Analysis parallélisée).
-- `data/` : **Le Coffre-fort** (Stockage local, Cache JSON, Images).
+### Étape 3 : Poser vos questions (La Méthode Facile ✨)
+1. Ouvrez le fichier **`data/prompt.md`** avec un bloc-notes.
+2. Écrivez votre question (ex: "Fais-moi un résumé des pénalités de retard").
+3. Lancez : `./venv/bin/python extract/rfp_agent.py`
+*La réponse s'affiche en direct, comme si l'IA vous parlait.*
 
 ---
 
-🔒 **Confidentialité** : Ce système tourne **100% en local**. Rien n'est envoyé sur internet.
-*(Architecture détaillée dans [ARCHITECTURE.md](ARCHITECTURE.md))*
+## 📂 Où sont mes fichiers ?
+
+- `extract/` : Le moteur (les câbles et les engrenages).
+- `data/input/` : Déposez vos PDF ici.
+- `data/gap_analysis_report.md` : Votre tableau de conformité final.
+
+---
+
+🔒 **Confidentialité** : Ce système est un coffre-fort. Rien ne sort de votre PC.
+*(Pour les techniciens, les détails sont dans [ARCHITECTURE.md](ARCHITECTURE.md))*

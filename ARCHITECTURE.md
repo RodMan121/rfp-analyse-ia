@@ -1,46 +1,54 @@
-# 🏗️ Architecture Technique : Augmented BID IA (V2.2)
+# 🏗️ Sous le capot : L'Architecture du Système
 
-Ce document détaille le fonctionnement interne du moteur.
-
----
-
-## 📊 1. Pipeline d'Extraction Multimodal
-
-Le système supporte deux moteurs d'extraction :
-1.  **IBM Docling (Local)** : Parsing structurel hiérarchique, idéal pour la confidentialité totale.
-2.  **Gemini 2.0 Flash (Cloud)** : Extraction avancée de schémas PlantUML, diagrammes d'architecture et relations logiques (nécessite une `GOOGLE_API_KEY`).
+Ce document explique comment les composants du projet collaborent pour produire une analyse de haute qualité.
 
 ---
 
-## 🧠 2. Recherche Hybride & Fusion RRF
+## 📊 Le Voyage de la Donnée
 
-Pour une précision chirurgicale, nous fusionnons deux index :
--   **Index Vectoriel (ChromaDB)** : Capture le contexte sémantique (Embeddings multilingual).
--   **Index Textuel (BM25)** : Capture les termes exacts (Articles, Normes, IDs).
+Voici le chemin parcouru par votre PDF (diagramme simplifié) :
 
-### Formule RRF (Reciprocal Rank Fusion)
-Nous utilisons l'algorithme standard avec une constante `k=60` :
-`Score(d) = Σ (1 / (k + Rang(d, moteur)))`
-Cela garantit que les documents bien classés dans les *deux* moteurs remontent en priorité.
+```text
+📄 PDF BRUT
+    |
+    ▼
+[⚙️ PARSER DOCLING] -> Découpe proprement (Sections, Tableaux)
+    |
+    ▼
+[📦 TAGGING SÉMANTIQUE] -> Classe par métier (FINANCE, TECH, SÉCURITÉ)
+    |
+    ▼
+[🗄️ DOUBLE INDEXATION]
+    ├─► ChromaDB (Vecteurs pour le sens)
+    └─► BM25 (Index textuel pour les mots exacts)
+    |
+    ▼
+[🤖 AGENT IA] -> Fusionne les résultats (RRF) et répond (Streaming)
+```
 
 ---
 
-## 🛡️ 3. Audit & Robustesse
+## 🧠 Les 3 Secrets de la Précision
 
-### IDs Déterministes
-Pour éviter les doublons lors de ré-indexations, chaque fragment possède un ID généré par un **Hash MD5** du contenu (`source + page + texte`).
+### 1. La Fusion RRF (Reciprocal Rank Fusion)
+C'est notre "juge de paix". Elle prend les 20 meilleurs résultats des vecteurs et les 20 meilleurs de l'index BM25. Elle ne garde que ceux qui sont bien classés dans les deux listes. 
+*   **Résultat** : Une précision chirurgicale sur les termes techniques.
 
-### Cache de Fragments
-Le fichier `.fragments.json` stocke le résultat du parsing. Le système vérifie la date de modification (`st_mtime`) du PDF source : si le PDF est plus récent que le cache, le parsing est relancé automatiquement.
+### 2. Le Reranking (FlashRank)
+Avant de donner les textes à l'IA, un mini-cerveau ultra-rapide les relit pour s'assurer que le contenu répond **réellement** à la question. Il trie les documents du plus pertinent au moins pertinent.
 
-### Gap Analysis Parallélisée
-L'analyse de conformité utilise un `ThreadPoolExecutor`. Le nombre de threads est piloté par `OLLAMA_NUM_PARALLEL` pour s'adapter à la configuration de votre serveur Ollama.
+### 3. La Vision Cognitive
+Si vous demandez d'analyser un schéma, l'agent bascule automatiquement sur le modèle **Llama 3.2 Vision**. Il récupère l'image de la page correspondante et la "regarde" pour vous.
 
 ---
 
 ## 🛠️ Stack Technique
-- **LLM** : Ollama (Qwen 2.5)
-- **Vision** : Llama 3.2 Vision
-- **Vector Store** : ChromaDB
-- **Reranker** : FlashRank
-- **Retry Logic** : Tenacity (Exponentiel)
+- **LLM Local** : Ollama (Qwen 2.5 / Llama 3.2 Vision).
+- **Base Vectorielle** : ChromaDB (avec IDs MD5 déterministes).
+- **Parsing** : IBM Docling (Extraction hiérarchique).
+- **Reranker** : FlashRank.
+- **Robustesse** : Tenacity (pour les retries API Gemini).
+
+---
+
+🔒 **Sécurité & Robustesse** : Le système utilise un cache de fragments (`.fragments.json`) qui ne se recharge que si le PDF source a été modifié.
