@@ -5,6 +5,7 @@ import json
 import hashlib
 import datetime
 import asyncio
+import time
 from pathlib import Path
 from loguru import logger
 from typing import List, Dict, Any, Optional
@@ -54,22 +55,29 @@ class ArchitectureComposer:
             self.async_ollama = ollama.AsyncClient()
 
     async def _call_llm(self, prompt: str, format: str = "json") -> Dict:
-        try:
-            if self.mode == "OPENROUTER":
-                response = await self.client_or.chat.completions.create(
-                    model=self.model,
-                    messages=[{"role": "user", "content": prompt}],
-                    response_format={"type": "json_object"} if format == "json" else None
-                )
-                return {"response": response.choices[0].message.content}
-            elif self.mode == "GEMINI":
-                config = {"response_mime_type": "application/json"} if format == "json" else {}
-                response = await self.client_gemini.aio.models.generate_content(model=self.model, contents=prompt, config=config)
-                return {"response": response.text}
-            else:
-                response = await self.async_ollama.generate(model=self.model, prompt=prompt, format=format if format == "json" else None, options={"num_ctx": 2048, "temperature": 0.1})
-                return {"response": response.get("response", "{}")}
-        except Exception: return {"response": "{}"}
+        """FIX P2.7 : Unification du mécanisme de retry."""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                if self.mode == "OPENROUTER":
+                    response = await self.client_or.chat.completions.create(
+                        model=self.model,
+                        messages=[{"role": "user", "content": prompt}],
+                        response_format={"type": "json_object"} if format == "json" else None,
+                        timeout=30.0
+                    )
+                    return {"response": response.choices[0].message.content}
+                elif self.mode == "GEMINI":
+                    config = {"response_mime_type": "application/json"} if format == "json" else {}
+                    response = await self.client_gemini.aio.models.generate_content(model=self.model, contents=prompt, config=config)
+                    return {"response": response.text}
+                else:
+                    response = await self.async_ollama.generate(model=self.model, prompt=prompt, format=format if format == "json" else None, options={"num_ctx": 2048, "temperature": 0.1})
+                    return {"response": response.get("response", "{}")}
+            except Exception as e:
+                delay = 5 * (attempt + 1) if "429" in str(e) else 2 * (attempt + 1)
+                await asyncio.sleep(delay)
+        return {"response": "{}"}
 
     def _clean_json(self, raw_resp: str) -> Dict:
         try:
@@ -85,24 +93,34 @@ class ArchitectureComposer:
         with open(path, "r", encoding="utf-8") as f: data = json.load(f)
         reqs = []
         for d in data:
-            state_val = d.pop("state")
-            r = FSMRequirement(**d)
-            r.state = RequirementState(state_val)
+            # FIX P2.4 : Ne pas muter le dict original avec pop()
+            d_copy = {k: v for k, v in d.items() if k != "state"}
+            r = FSMRequirement(**d_copy)
+            r.state = RequirementState(d["state"])
             reqs.append(r)
         return reqs
 
     async def assemble_baseline(self, audited_requirements: List[FSMRequirement]) -> TechnicalBaseline:
-        final_set = [r for r in audited_requirements if r.state in [RequirementState.CLEAN, RequirementState.NORMALIZED] and len(r.source_quote) > 5]
-        if not final_set: return None
+        # On accepte CLEAN, NORMALIZED et AUDITED (nouvel état v9)
+        final_set = [r for r in audited_requirements if r.state in [RequirementState.CLEAN, RequirementState.NORMALIZED, RequirementState.AUDITED] and len(r.source_quote) > 5]
+        
+        # FIX P2.6 : Log explicite en cas d'absence d'exigences
+        if not final_set:
+            logger.error("🚫 Échec certification : Aucune exigence validée (CLEAN/NORMALIZED/AUDITED) trouvée.")
+            return None
 
+        # 1. MoSCoW
         moscow_data = {"Must": [], "Should": [], "Could": [], "Won't": []}
         batch_size = 10
         for i in range(0, min(len(final_set), 50), batch_size):
             batch = final_set[i:i+batch_size]
             partial_moscow = await self._construct_moscow(batch)
-            for key in moscow_data: moscow_data[key].extend(partial_moscow.get(key, []))
+            for key in moscow_data:
+                moscow_data[key].extend(partial_moscow.get(key, []))
 
+        # 2. Scoring d'intégrité
         integrity_data = await self._scoring_integrity(moscow_data)
+
         serializable_reqs = []
         for r in final_set:
             r.transition_to(RequirementState.BASELINE, "Certification finale")
@@ -121,6 +139,7 @@ class ArchitectureComposer:
         )
         self._export_json(baseline)
         self._export_markdown(baseline)
+        logger.success(f"📦 Baseline {baseline.project_uid} certifiée avec succès.")
         return baseline
 
     def _export_json(self, baseline: TechnicalBaseline):

@@ -20,7 +20,14 @@ class VectorStore:
         self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name="paraphrase-multilingual-MiniLM-L12-v2"
         )
-        self.client = chromadb.PersistentClient(path=str(db_path))
+        # Désactivation de la télémétrie pour un terminal propre
+        os.environ["ANONYMIZED_TELEMETRY"] = "False"
+
+        self.client = chromadb.PersistentClient(
+            path=db_path,
+            settings=chromadb.config.Settings(anonymized_telemetry=False)
+        )
+
         self.collection = self.client.get_or_create_collection(
             name=collection_name, embedding_function=self.embedding_fn
         )
