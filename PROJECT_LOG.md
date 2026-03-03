@@ -20,6 +20,13 @@
 - [x] Moteur Reverse TOGAF avec scoring d'intégrité (1 à 5).
 - [x] Output "ALM Ready" (Technical Baseline Immuable).
 
+### 🛠️ Maintenance & Qualité (Ingénierie)
+- [x] Audit Qualité complet (Mars 2026).
+- [x] Migration vers standard PEP8 avec `Ruff`.
+- [x] Nettoyage des clauses `except` nues et des imports orphelins.
+- [x] Implémentation du **Requirement Harvester** (Moissonneur industriel).
+- [x] Système de logs centralisé (`factory_log.py`).
+
 ## 🚀 Prochaines étapes (Backlog)
 - [ ] Connecteur d'export vers ALM (Jira / Confluence / DOORS).
 - [ ] Interface Web Dashboard (Streamlit).

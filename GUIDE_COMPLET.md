@@ -9,7 +9,31 @@ Ce guide explique comment utiliser les fichiers générés à la fin du cycle de
 ```text
 data/
 ├── technical_baseline_final.md  <-- POUR LES HUMAINS (Lire & Valider)
-└── technical_baseline_alm.json  <-- POUR LES MACHINES (Importer & Tracer)
+├── technical_baseline_alm.json  <-- POUR LES MACHINES (Importer & Tracer)
+└── fsm_registry.json            <-- REGISTRE INTERMÉDIAIRE (Audit des agents)
+```
+
+---
+
+## 🚀 Le Workflow Industriel (3 Étapes)
+
+### 1. Ingestion (Phase 1)
+Préparez la matière première.
+```bash
+python extract/main.py --input data/input/mon_rfp.pdf
+```
+
+### 2. Moissonnage (Phase 2)
+Lancez l'usine de traitement complète. Contrairement à `granular_audit.py` qui ne fait qu'un échantillon, `requirement_harvester.py` scanne **l'intégralité** de la base immuable pour en extraire chaque exigence potentielle.
+```bash
+python extract/requirement_harvester.py
+```
+*Vérifiez ensuite les logs dans la console pour voir le taux de réussite.*
+
+### 3. Certification (Phase 3)
+Générez les livrables finaux.
+```bash
+python extract/phase3/composer.py
 ```
 
 ---

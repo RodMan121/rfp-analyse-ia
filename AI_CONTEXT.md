@@ -16,4 +16,7 @@ Ce projet n'est pas un système RAG classique, c'est une **Machine à État Fini
 - **LLM Local** : Modèles Ollama (`qwen2.5:7b`).
 - **Data Integrity** : `dataclasses` obligatoires pour la manipulation de données. Mutation en place interdite (travailler sur des copies).
 - **JSON Handling** : Toujours utiliser `_clean_json_response()` pour parser les retours LLM (qui contiennent souvent du Markdown indésirable).
-- **PEP8** : Respect strict, aucun point-virgule. Logging via `loguru`.
+- **PEP8 & Ruff** : Adhérence stricte aux standards PEP8 via `Ruff`. Formatage automatique et linting obligatoires avant chaque commit.
+- **Typage** : Utilisation intensive du typage statique (`mypy`) avec Python 3.12+.
+- **Logging** : Logging unifié via `loguru` et `utils/factory_log.py` pour la traçabilité industrielle.
+- **Requirement Harvester** : Point d'entrée industriel (`extract/requirement_harvester.py`) pour le scan complet et la mise en file d'attente FSM.

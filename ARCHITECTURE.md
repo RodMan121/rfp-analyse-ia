@@ -14,16 +14,17 @@ graph TD
     end
     
     subgraph "PHASE 2 : Traiter (FSM)"
-        C -->|Agent BABOK| D{NORMALIZED}
-        D -->|Agent Radar| E{CLEAN}
-        E -->|Agent ISO| F{AUDITED}
-        E -.->|Score > 0| G[🚩 STALLED]
+        C -->|Requirement Harvester| D[Industrial Scanning]
+        D -->|Agent BABOK| E{NORMALIZED}
+        E -->|Agent Radar| F{CLEAN}
+        F -->|Agent ISO| G{AUDITED}
+        F -.->|Score > 0| H[🚩 STALLED]
     end
     
     subgraph "PHASE 3 : Associer"
-        F -->|Certification| H{BASELINE}
-        H --> I[📄 Rendu Markdown]
-        H --> J[💾 Rendu JSON ALM]
+        G -->|Certification| I{BASELINE}
+        I --> J[📄 Rendu Markdown]
+        I --> K[💾 Rendu JSON ALM]
     end
 ```
 
@@ -41,7 +42,8 @@ Un fichier structuré avec tous les attributs techniques (UID, Sujet, Action, Ob
 
 ---
 
-## 🛠️ 3. Intégrité et Sûreté de Fonctionnement
+## 🛠️ 3. Intégrité, Sûreté & Observabilité
 
 - **Project UID :** Le sceau d'immuabilité (ALM-XXXX) est un hash calculé sur l'intégralité des exigences certifiées. Toute modification ultérieure briserait cette signature.
 - **Fail-Safe :** Une exigence ne peut atteindre l'état BASELINE si son score d'ambiguïté en Phase 2 n'est pas strictement égal à zéro.
+- **Observabilité :** Le système intègre un `factory_logger` (Phase 2 & 3) qui trace chaque événement industriel (début de scan, certification, erreurs de pipeline) pour une maintenance préventive facilitée.

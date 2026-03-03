@@ -23,9 +23,10 @@ Le système génère une **Technical Baseline** bi-format à la fin du processus
     ```bash
     ./venv/bin/python extract/main.py --input data/input/mon_rfp.pdf
     ```
-2.  **Traiter (Phase 2 ✨)** : Audit automatique par les Micro-Agents.
+2.  **Traiter (Phase 2 ✨)** : Moissonnage industriel par les Micro-Agents.
     ```bash
-    ./venv/bin/python extract/granular_audit.py
+    # Utiliser le moissonneur pour un scan complet du document
+    ./venv/bin/python extract/requirement_harvester.py
     ```
 3.  **Associer (Phase 3 📦)** : Certification de la Baseline technique.
     ```bash
@@ -34,5 +35,10 @@ Le système génère une **Technical Baseline** bi-format à la fin du processus
 
 ---
 
-🔒 **Auditabilité Totale** : Chaque exigence porte son `project_uid` unique et son historique de transition.
+## 🛡️ Standards de Qualité & Ingénierie
+Le code est audité et maintenu selon des standards rigoureux :
+- **Linting & Formatage** : Utilisation de `Ruff` (PEP8) pour une base de code propre et performante.
+- **Typage** : Vérification statique par `Mypy` (Python 3.12+).
+- **Auditabilité** : Chaque exigence porte son `project_uid` unique et son historique de transition.
+
 *(Détails techniques dans [ARCHITECTURE.md](ARCHITECTURE.md))*

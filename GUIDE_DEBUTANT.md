@@ -31,13 +31,13 @@ Vous êtes le chef d'atelier. Voici vos 3 commandes :
     Vous mettez le PDF dans `data/input/` et vous lancez :
     `python extract/main.py --input data/input/mon_document.pdf`
 
-2.  **Lancer le tapis roulant (Audit Granulaire)** :
-    Vous dites aux robots d'inspecter les pièces :
-    `python extract/granular_audit.py`
-    *(Vous lisez ensuite le rapport pour voir quelles pièces ont eu un feu rouge).*
+2.  **Lancer le tapis roulant (Le Moissonnage)** :
+    Vous dites aux robots d'inspecter l'intégralité des pièces :
+    `python extract/requirement_harvester.py`
+    *(Cela crée le registre de toutes les exigences détectées et auditées).*
 
-3.  **Emballer le produit final (Synthèse)** :
-    Vous générez le tableau Excel / Markdown :
+3.  **Emballer le produit final (La Baseline)** :
+    Vous générez la Technical Baseline (Markdown & JSON) :
     `python extract/phase3/composer.py`
 
 ---
@@ -45,6 +45,7 @@ Vous êtes le chef d'atelier. Voici vos 3 commandes :
 ## 🕵️ Et si je veux juste discuter avec mon document ?
 Si vous avez besoin de comprendre pourquoi un point est bloqué, vous pouvez toujours utiliser le vieux système de "Chatbot" pour enquêter :
 `python extract/rfp_agent.py "Pourquoi ce point est bloqué ?"`
+
 
 ---
 
