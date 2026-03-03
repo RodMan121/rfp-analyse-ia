@@ -5,6 +5,7 @@ import json
 import asyncio
 import time
 import re
+import base64
 from enum import Enum
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -20,7 +21,7 @@ env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 sys.path.append(str(Path(__file__).parent.parent))
 
-# --- FIX v11 : Regex de bruit et d'ID ---
+# --- Regex de bruit et d'ID ---
 _NOISE_RE = re.compile(
     r"if printed|confidential information|iss\. \d+-\d+"
     r"|page \d+ of \d+|figure \d+\s*:|signature sheet"
@@ -47,6 +48,7 @@ class RequirementState(Enum):
 class FSMRequirement:
     uid: str
     original_text: str
+    requirement_id: str = "N/A"
     source_quote: str = ""
     state: RequirementState = RequirementState.RAW
     state_history: List[str] = field(default_factory=list)
@@ -88,24 +90,58 @@ class FSMAgent(ABC):
     async def trigger(self, req: FSMRequirement) -> FSMRequirement:
         pass
 
-    async def _call_llm(self, prompt: str, format: str = "json") -> Dict:
+    async def _call_llm(self, prompt: str, format: str = "json", image_path: Optional[str] = None) -> Dict:
+        """Appelle le LLM avec support optionnel de l'image."""
         max_retries = 3
+        
+        # Encodage de l'image si présente
+        base64_image = None
+        if image_path and os.path.exists(image_path):
+            with open(image_path, "rb") as f:
+                base64_image = base64.b64encode(f.read()).decode("utf-8")
+
         for attempt in range(max_retries):
             try:
                 if self.mode == "OPENROUTER":
+                    content = [{"type": "text", "text": prompt}]
+                    if base64_image:
+                        content.append({
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{base64_image}"}
+                        })
+                    
                     response = await self.client_or.chat.completions.create(
                         model=self.model,
-                        messages=[{"role": "user", "content": prompt}],
+                        messages=[{"role": "user", "content": content}],
                         response_format={"type": "json_object"} if format == "json" else None,
-                        timeout=40.0
+                        timeout=60.0
                     )
                     return {"response": response.choices[0].message.content}
+                
                 elif self.mode == "GEMINI":
+                    # Note: Support multimodal via client direct Google
+                    content = [prompt]
+                    if base64_image:
+                        from google.genai import types
+                        with open(image_path, "rb") as f:
+                            img_data = f.read()
+                        content.append(types.Part.from_bytes(data=img_data, mime_type="image/png"))
+                    
                     config = {"response_mime_type": "application/json"} if format == "json" else {}
-                    response = await self.client_gemini.aio.models.generate_content(model=self.model, contents=prompt, config=config)
+                    response = await self.client_gemini.aio.models.generate_content(
+                        model=self.model, contents=content, config=config
+                    )
                     return {"response": response.text}
+                
                 else: # OLLAMA
-                    response = await self.async_ollama.generate(model=self.model, prompt=prompt, format=format if format == "json" else None, options={"num_ctx": 1024, "temperature": 0.1})
+                    images = [image_path] if image_path else None
+                    response = await self.async_ollama.generate(
+                        model=self.model, 
+                        prompt=prompt, 
+                        images=images,
+                        format=format if format == "json" else None,
+                        options={"num_ctx": 2048, "temperature": 0.1}
+                    )
                     return {"response": response.get("response", "{}")}
             except Exception as e:
                 await asyncio.sleep(5 * (attempt + 1))
@@ -119,65 +155,82 @@ class FSMAgent(ABC):
             return json.loads(clean)
         except Exception: return {}
 
+class VisionRequirementAgent(FSMAgent):
+    """Analyse les schémas et maquettes pour en extraire des descriptions techniques."""
+    def __init__(self):
+        super().__init__()
+        # On force un modèle Vision si on est sur OpenRouter ou Ollama
+        if self.mode == "OPENROUTER":
+            self.model = os.getenv("OPENROUTER_VISION_MODEL", "google/gemini-2.0-flash-001")
+        elif self.mode == "OLLAMA":
+            self.model = os.getenv("OLLAMA_VISION_MODEL", "llama3.2-vision")
+
+    async def trigger(self, req: FSMRequirement) -> FSMRequirement:
+        img_path = req.metadata.get("image_path")
+        if not img_path:
+            return req
+
+        prompt = """Analyse cette image extraite d'un appel d'offres (schéma ou maquette fil de fer).
+Décris précisément tous les éléments techniques, les champs de saisie, les boutons, les flux de données ou les composants d'infrastructure visibles.
+Transforme cette image en une liste d'exigences textuelles factuelles.
+Réponds UNIQUEMENT en JSON : {"description": "...", "extracted_requirements": ["req 1", "req 2"]}"""
+
+        try:
+            resp = await self._call_llm(prompt=prompt, format="json", image_path=img_path)
+            data = self._clean_json(resp.get("response", "{}"))
+            
+            # On enrichit le texte original avec la description de la vision
+            desc = data.get("description", "")
+            reqs = "\n".join(data.get("extracted_requirements", []))
+            req.original_text = f"[VISION ANALYSIS]\nDescription: {desc}\nRequirements:\n{reqs}"
+            
+            req.transition_to(RequirementState.RAW, "Analyse Vision complétée")
+        except Exception as e:
+            logger.error(f"❌ Erreur Vision sur {img_path}: {e}")
+        
+        return req
+
 class BABOKAgent(FSMAgent):
     async def trigger(self, req: FSMRequirement) -> FSMRequirement:
         text = req.original_text
+        if len(text) < 50: return req # Laisse passer pour le moment si c'est de la vision
 
-        # FIX v11 : Filtre longueur (monte à 80)
-        if len(text) < 80:
-            req.transition_to(RequirementState.ERROR, "Fragment trop court")
-            return req
-
-        # FIX v11 : Filtre bruit structurel regex
-        if _NOISE_RE.search(text):
+        if _NOISE_RE.search(text) and "VISION" not in text:
             req.transition_to(RequirementState.ERROR, "Bruit structurel filtré")
             return req
 
-        # Extraction de l'identifiant officiel BN-XXX ou IT_REQ-XXX
         id_match = _REQUIREMENT_ID_RE.search(text)
         official_id = id_match.group(1) if id_match else None
 
-        # FIX v11 : Prompt enrichi pour forcer l'extraction de l'id officiel
-        prompt = f"""Tu es un expert BABOK v3. Analyse cette exigence RFP et retourne UNIQUEMENT ce JSON :
+        prompt = f"""Tu es un expert BABOK v3. Analyse cette exigence (texte ou description d'image) et retourne ce JSON :
 {{
-  "sujet": "acteur ou système concerné",
-  "action": "verbe d'obligation (must/shall/should)",
-  "objet": "ce qui doit être réalisé",
-  "citation_source": "citation verbatim de l'exigence (40-200 chars)",
-  "official_id": "identifiant BN-XXX ou IT_REQ-XXX trouvé, sinon null",
+  "sujet": "acteur ou système",
+  "action": "must/shall/should",
+  "objet": "réalisation",
+  "citation_source": "verbatim (ou synthèse si vision)",
+  "official_id": "identifiant si présent",
   "is_real_requirement": true/false
 }}
-
-Texte : \"{text}\"
-
-Règle : is_real_requirement = false si le texte est une légende, un header, une note administrative, ou ne contient pas d'obligation fonctionnelle claire."""
+Texte : \"{text}\""""
 
         try:
             resp = await self._call_llm(prompt=prompt, format="json")
             data = self._clean_json(resp.get("response", "{}"))
 
-            # Rejeter si le LLM confirme que ce n'est pas une vraie exigence
             if not data.get("is_real_requirement", True):
-                req.transition_to(RequirementState.ERROR, "Non-exigence confirmée par LLM")
-                return req
-
-            if not data.get("citation_source") or not data.get("sujet"):
-                req.transition_to(RequirementState.ERROR, "Structure BABOK incomplète")
+                req.transition_to(RequirementState.ERROR, "Non-exigence")
                 return req
 
             req.source_quote = data.get("citation_source", "")
             req.subject = data.get("sujet", "")
             req.action = data.get("action", "")
             req.target_object = data.get("objet", "")
-
-            # Stocker l'id officiel dans les métadonnées
             final_id = official_id or data.get("official_id")
-            if final_id:
-                req.metadata["official_id"] = final_id
+            if final_id: req.metadata["official_id"] = final_id
 
             req.transition_to(RequirementState.NORMALIZED, "Conversion BABOK réussie")
-        except Exception as e:
-            req.transition_to(RequirementState.ERROR, f"Erreur BABOK: {e}")
+        except Exception: 
+            req.transition_to(RequirementState.ERROR, "Erreur BABOK")
         return req
 
 class WolfRadarAgent(FSMAgent):
@@ -202,7 +255,8 @@ class ISO25010Agent(FSMAgent):
 
 class FSMPipeline:
     def __init__(self):
-        self.factory = [BABOKAgent(), WolfRadarAgent(), ISO25010Agent()]
+        # Ordre crucial : Vision d'abord pour transformer les images en texte
+        self.factory = [VisionRequirementAgent(), BABOKAgent(), WolfRadarAgent(), ISO25010Agent()]
 
     async def run_factory(self, text: str, uid: str, metadata: Dict = None) -> FSMRequirement:
         req = FSMRequirement(uid=uid, original_text=text, metadata=metadata or {})
