@@ -3,6 +3,7 @@ import sys
 import ollama
 import json
 import hashlib
+import datetime
 from pathlib import Path
 from loguru import logger
 from typing import List, Dict, Any
@@ -35,9 +36,9 @@ class ArchitectureComposer:
         self.model = model or os.getenv("OLLAMA_TEXT_MODEL", "qwen2.5:7b")
 
     def assemble_baseline(self, audited_requirements: List[FSMRequirement]) -> TechnicalBaseline:
-        """Réassemble les fragments AUDITED en une Baseline immuable."""
+        """Réassemble les fragments AUDITED en une Baseline immuable (JSON + MD)."""
         
-        # 1. Sélection des exigences ayant atteint l'état final validé
+        # 1. Sélection des exigences validées
         final_set = [r for r in audited_requirements if r.state == RequirementState.AUDITED]
         
         # 2. Construction MoSCoW
@@ -46,16 +47,14 @@ class ArchitectureComposer:
         # 3. Scoring d'Intégrité Reverse TOGAF
         integrity_data = self._scoring_integrity(matrix_data)
         
-        # 4. Scellage immuable (Transition BASELINE)
-        import datetime
+        # 4. Scellage immuable
         serializable_reqs = []
         for r in final_set:
-            r.transition_to(RequirementState.BASELINE, "Sceau d'immuabilité ALM Ready")
+            r.transition_to(RequirementState.BASELINE, "Sceau d'immuabilité certifié")
             req_dict = asdict(r)
-            req_dict['state'] = r.state.value  # Conversion Enum pour JSON
+            req_dict['state'] = r.state.value
             serializable_reqs.append(req_dict)
 
-        # Génération du UID unique du projet basé sur le contenu total
         project_signature = hashlib.md5(json.dumps(serializable_reqs).encode()).hexdigest()
 
         baseline = TechnicalBaseline(
@@ -67,34 +66,69 @@ class ArchitectureComposer:
             integrity_score=integrity_data.get("score", 3)
         )
 
-        self._export_artifact(baseline)
+        # 5. Export des deux formats
+        self._export_json(baseline)
+        self._export_markdown(baseline)
+        
         return baseline
 
-    def _export_artifact(self, baseline: TechnicalBaseline):
-        """Sauvegarde l'artefact technique final (Output Node)."""
+    def _export_json(self, baseline: TechnicalBaseline):
         output_path = Path("data/technical_baseline_alm.json")
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(asdict(baseline), f, indent=2, ensure_ascii=False)
-        logger.success(f"💎 Technical Baseline Immuable générée : {output_path}")
+        logger.success(f"💾 JSON certifié : {output_path}")
+
+    def _export_markdown(self, baseline: TechnicalBaseline):
+        """Génère le document de Technical Baseline pour les humains."""
+        output_path = Path("data/technical_baseline_final.md")
+        
+        md = f"# 📦 Technical Baseline — Projet {baseline.project_uid}\n\n"
+        md += f"**Date de certification :** {baseline.timestamp}\n"
+        md += f"**Nombre d'exigences validées :** {baseline.requirements_count}\n"
+        md += f"**Score d'intégrité système :** {baseline.integrity_score}/5\n\n"
+        
+        md += "## 🎯 Matrice de Priorisation (MoSCoW)\n\n"
+        for prio, reqs in baseline.moscow_matrix.items():
+            md += f"### {prio}\n"
+            if not reqs: md += "_Aucune exigence._\n"
+            for r in reqs:
+                # Gérer si r est une string ou un dict
+                text = r.get('exigence', r) if isinstance(r, dict) else r
+                md += f"- {text}\n"
+            md += "\n"
+            
+        md += "## 📋 Catalogue des Exigences Certifiées\n\n"
+        md += "| UID | Sujet | Action | Objet | Contrainte | Historique FSM |\n"
+        md += "|:---:|---|---|---|---|---|\n"
+        
+        for r in baseline.validated_requirements:
+            hist = " ➔ ".join([h.split(" (")[0] for h in r['state_history']])
+            md += f"| {r['uid'][:8]} | {r['subject']} | {r['action']} | {r['target_object']} | {r['constraint']} | {hist} |\n"
+            
+        md += "\n---\n*Ce document est une Technical Baseline immuable générée par Augmented BID IA.*"
+        
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(md)
+        logger.success(f"📄 Markdown certifié : {output_path}")
 
     def _construct_moscow(self, requirements: List[FSMRequirement]) -> Dict:
         req_texts = [r.original_text for r in requirements]
-        prompt = f"Expert MoSCoW: Priorise ces exigences JSON : {json.dumps(req_texts)}"
+        prompt = f"Expert MoSCoW: Priorise ces exigences en Must/Should/Could/Won't JSON : {json.dumps(req_texts)}"
         try:
             resp = ollama.generate(model=self.model, prompt=prompt, format="json")
             return json.loads(resp.get('response', '{}'))
         except: return {"moscow": {}}
 
     def _scoring_integrity(self, matrix_data: Dict) -> Dict:
-        prompt = f"Expert TOGAF: Score l'intégrité système (1-5) en JSON : {json.dumps(matrix_data)}"
+        prompt = f"Expert TOGAF: Score l'intégrité (1-5) en JSON : {json.dumps(matrix_data)}"
         try:
             resp = ollama.generate(model=self.model, prompt=prompt, format="json")
             return json.loads(resp.get('response', '{}'))
         except: return {"score": 3}
 
 if __name__ == "__main__":
-    # Test unitaire de la phase de composition
     composer = ArchitectureComposer()
     mock_audited = FSMRequirement(uid="REQ-TEST", original_text="Le système doit être sécurisé.")
     mock_audited.state = RequirementState.AUDITED
+    mock_audited.subject, mock_audited.action = "Le Système", "Sécuriser"
     composer.assemble_baseline([mock_audited])
