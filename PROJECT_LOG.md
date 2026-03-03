@@ -23,7 +23,7 @@
 ### 🛠️ Maintenance & Qualité (Ingénierie)
 - [x] Audit Qualité complet (Mars 2026).
 - [x] Migration vers standard PEP8 avec `Ruff`.
-- [x] Nettoyage des clauses `except` nues et des imports orphelins.
+- [x] Intégration hybride **Ollama / API Gemini** (Phase 2 & 3).
 - [x] Implémentation du **Requirement Harvester** (Moissonneur industriel).
 - [x] Système de logs centralisé (`factory_log.py`).
 

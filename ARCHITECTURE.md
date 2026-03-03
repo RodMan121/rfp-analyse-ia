@@ -15,7 +15,8 @@ graph TD
     
     subgraph "PHASE 2 : Traiter (FSM)"
         C -->|Requirement Harvester| D[Industrial Scanning]
-        D -->|Agent BABOK| E{NORMALIZED}
+        D -->|Unified LLM Call| LLM{Ollama OR Gemini}
+        LLM -->|Agent BABOK| E{NORMALIZED}
         E -->|Agent Radar| F{CLEAN}
         F -->|Agent ISO| G{AUDITED}
         F -.->|Score > 0| H[🚩 STALLED]
