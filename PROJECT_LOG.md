@@ -16,6 +16,7 @@
 
 ### Phase 3 : Synthèse & Baseline (Associer)
 - [x] Constructeur Matrice MoSCoW.
+- [x] **Générateur Excel v12** : Matrice de conformité professionnelle avec filtrage anti-bruit.
 - [x] Génération de matrice de Transitions d'États.
 - [x] Moteur Reverse TOGAF avec scoring d'intégrité (1 à 5).
 - [x] Output "ALM Ready" (Technical Baseline Immuable).

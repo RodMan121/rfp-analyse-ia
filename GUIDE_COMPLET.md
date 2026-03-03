@@ -9,6 +9,7 @@ Ce guide explique comment utiliser les fichiers générés à la fin du cycle de
 ```text
 data/
 ├── technical_baseline_final.md  <-- POUR LES HUMAINS (Lire & Valider)
+├── Matrice_Conformite_RFP.xlsx  <-- MATRICE DE CONFORMITÉ (Format Client)
 ├── technical_baseline_alm.json  <-- POUR LES MACHINES (Importer & Tracer)
 └── fsm_registry.json            <-- REGISTRE INTERMÉDIAIRE (Audit des agents)
 ```
@@ -37,9 +38,13 @@ Si vous avez un GPU avec peu de VRAM (ex: 4 Go), vous pouvez ajuster les perform
 ---
 
 ### 3. Certification (Phase 3)
-Générez les livrables finaux.
+Générez les livrables finaux (Markdown, JSON et Excel).
 ```bash
+# Générer le rapport Markdown et JSON
 python extract/phase3/composer.py
+
+# Générer la matrice de conformité Excel
+python extract/phase3/excel_generator.py
 ```
 
 ---
@@ -62,6 +67,16 @@ C'est votre document officiel de revue. Il résume tout le travail des agents :
 C'est le fichier qui permet de connecter Augmented BID IA au reste de votre chaîne de production logicielle.
 - **ALM Integration** : Vous pouvez utiliser ce fichier pour créer automatiquement des tickets Jira ou alimenter un outil comme Confluence.
 - **Sceau d'Immuabilité** : Le `project_uid` présent à l'intérieur garantit que ce fichier n'a pas été modifié "à la main" après sa génération par l'IA.
+
+---
+
+## 📊 3. La Matrice de Conformité Excel (`Matrice_Conformite_RFP.xlsx`)
+
+**À quoi ça sert ?**
+C'est le document de travail pour votre réponse commerciale.
+- **Tri MoSCoW** : Les exigences sont réparties dans des onglets (MUST, SHOULD, COULD).
+- **Anti-Bruit** : Les scories du document (sommaires, etc.) sont isolées dans un onglet dédié pour audit.
+- **Prêt pour le Chiffrage** : Vous pouvez ajouter vos propres colonnes (Estimation, Responsable) directement dans ce fichier.
 
 ---
 
