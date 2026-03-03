@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 DEFAULT_CACHE = os.getenv("MODELS_CACHE_DIR", "data/models_cache")
 
+
 class LocalReranker:
     """
     Reranker local utilisant FlashRank.
@@ -19,15 +20,23 @@ class LocalReranker:
         self.ranker = Ranker(model_name=model_name, cache_dir=DEFAULT_CACHE)
 
     def rerank(self, query: str, documents: List[dict], top_n: int = 5) -> List[dict]:
-        if not documents: return []
-        passages = [{"id": i, "text": doc["text"], "meta": doc["metadata"]} for i, doc in enumerate(documents)]
+        if not documents:
+            return []
+        passages = [
+            {"id": i, "text": doc["text"], "meta": doc["metadata"]}
+            for i, doc in enumerate(documents)
+        ]
         rerank_request = RerankRequest(query=query, passages=passages)
         results = self.ranker.rerank(rerank_request)
-        
+
         final_results = []
         for r in results[:top_n]:
-            final_results.append({
-                "text": r["text"], "metadata": r["meta"], "score": round(float(r["score"]), 4)
-            })
+            final_results.append(
+                {
+                    "text": r["text"],
+                    "metadata": r["meta"],
+                    "score": round(float(r["score"]), 4),
+                }
+            )
         logger.info(f"🎯 Reranking terminé : {len(final_results)} sélectionnés.")
         return final_results

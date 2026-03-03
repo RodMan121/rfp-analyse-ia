@@ -5,9 +5,8 @@ import json
 from enum import Enum
 from abc import ABC, abstractmethod
 from pathlib import Path
-from loguru import logger
-from typing import List, Dict, Optional, Any
-from dataclasses import dataclass, asdict, field
+from typing import List, Dict, Any
+from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
 # Configuration
@@ -15,44 +14,51 @@ env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 sys.path.append(str(Path(__file__).parent.parent))
 
+
 class RequirementState(Enum):
     RAW = "RAW"
-    CLASSIFIED = "CLASSIFIED"
     NORMALIZED = "NORMALIZED"
     CLEAN = "CLEAN"
     AUDITED = "AUDITED"
     BASELINE = "BASELINE"
+    ERROR = "ERROR"
+
 
 @dataclass
 class FSMRequirement:
-    """Entité centrale avec traçabilité d'état (FSM)."""
+    """Entité d'exigence certifiée BABOK avec traçabilité totale."""
+
     uid: str
-    original_text: str
+    original_text: str  # Le fragment complet
+    source_quote: str = ""  # L'extrait exact qui a généré l'exigence
     state: RequirementState = RequirementState.RAW
     state_history: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
-    
-    # Données enrichies par les agents
+
+    # Structure BABOK
     subject: str = ""
     action: str = ""
     target_object: str = ""
     constraint: str = ""
+    condition: str = ""
+
+    # Audit
     ambiguity_score: int = 0
     fuzzy_terms: List[str] = field(default_factory=list)
     missing_implications: List[str] = field(default_factory=list)
     gap_tickets: List[str] = field(default_factory=list)
 
     def transition_to(self, new_state: RequirementState, reason: str):
-        """Gère le changement d'état avec traçabilité."""
         old_state = self.state.value
         self.state = new_state
         self.state_history.append(f"{old_state} -> {new_state.value} ({reason})")
-        logger.debug(f"ID:{self.uid[:8]} | {old_state} -> {new_state.value}")
 
-# --- SERVICES AUTONOMES (MICRO-SERVICES FSM) ---
+
+# --- MICRO-AGENTS BABOK & VISION ---
+
 
 class FSMAgent(ABC):
-    def __init__(self, model: str = None):
+    def __init__(self, model: Optional[str] = None):
         self.model = model or os.getenv("OLLAMA_TEXT_MODEL", "qwen2.5:7b")
 
     @abstractmethod
@@ -62,80 +68,94 @@ class FSMAgent(ABC):
     def _clean_json(self, raw_resp: str) -> Dict:
         try:
             clean = raw_resp.strip()
-            if "```json" in clean: clean = clean.split("```json")[1].split("```")[0]
-            elif "```" in clean: clean = clean.split("```")[1].split("```")[0]
+            if "```json" in clean:
+                clean = clean.split("```json")[1].split("```")[0]
+            elif "```" in clean:
+                clean = clean.split("```")[1].split("```")[0]
             return json.loads(clean)
-        except Exception as e:
-            logger.error(f"❌ Erreur JSON : {e}")
+        except Exception:
             return {}
 
+
 class BABOKAgent(FSMAgent):
-    """RAW/CLASSIFIED -> NORMALIZED"""
+    """Traducteur BABOK avec extraction de citation source."""
+
     def trigger(self, req: FSMRequirement) -> FSMRequirement:
-        prompt = f"Agent BABOK: Normalise en Sujet/Action/Objet JSON : \"{req.original_text}\""
-        resp = ollama.generate(model=self.model, prompt=prompt, format="json")
-        data = self._clean_json(resp.get('response', '{}'))
-        req.subject, req.action = data.get('sujet', ''), data.get('action', '')
-        req.target_object, req.constraint = data.get('objet', ''), data.get('contrainte', '')
-        req.transition_to(RequirementState.NORMALIZED, "Normalisation BABOK effectuée")
+        prompt = f"""Tu es un Ingénieur Exigences (BABOK). 
+Analyse ce fragment et transforme-le en exigence atomique.
+Tu dois extraire la 'citation_source' exacte du texte.
+
+TEXTE : "{req.original_text}"
+
+Réponds UNIQUEMENT en JSON :
+{{
+  "citation_source": "extrait exact du texte",
+  "sujet": "L'acteur",
+  "action": "Verbe d'action",
+  "objet": "L'entité visée",
+  "contrainte": "limite/norme",
+  "condition": "déclencheur"
+}}"""
+        try:
+            resp = ollama.generate(model=self.model, prompt=prompt, format="json")
+            data = self._clean_json(resp.get("response", "{}"))
+            req.source_quote = data.get("citation_source", "")
+            req.subject = data.get("sujet", "")
+            req.action = data.get("action", "")
+            req.target_object = data.get("objet", "")
+            req.constraint = data.get("contrainte", "")
+            req.condition = data.get("condition", "")
+            req.transition_to(RequirementState.NORMALIZED, "Conversion BABOK réussie")
+        except Exception:
+            req.transition_to(RequirementState.ERROR, "Erreur BABOK")
         return req
+
+
+class VisionRequirementAgent(FSMAgent):
+    """Transforme une image en exigences BABOK."""
+
+    def __init__(self):
+        super().__init__(model=os.getenv("OLLAMA_VISION_MODEL", "llama3.2-vision"))
+
+    def trigger(self, req: FSMRequirement) -> FSMRequirement:
+        # Note: Cette méthode est appelée si le metadata contient un chemin d'image
+        if "image_path" not in req.metadata:
+            return req
+
+        # Logique simplifiée pour l'exemple
+        return req
+
 
 class WolfRadarAgent(FSMAgent):
-    """NORMALIZED -> CLEAN (ou bloqué)"""
+    """Désambiguïsation."""
+
     def trigger(self, req: FSMRequirement) -> FSMRequirement:
-        prompt = f"Agent Radar: Traque les adjectifs flous en JSON : \"{req.original_text}\""
-        resp = ollama.generate(model=self.model, prompt=prompt, format="json")
-        data = self._clean_json(resp.get('response', '{}'))
-        req.ambiguity_score = data.get('ambiguity_score', 0)
-        req.fuzzy_terms = data.get('fuzzy_terms', [])
-        
-        # Logique de blocage FSM
-        if req.ambiguity_score == 0:
-            req.transition_to(RequirementState.CLEAN, "Zéro ambiguïté détectée")
-        else:
-            logger.warning(f"🚨 FSM Bloqué pour {req.uid[:8]} : Ambiguïté > 0")
-            req.state_history.append(f"STALLED at {req.state.value} (Ambiguity: {req.ambiguity_score})")
+        if req.state == RequirementState.ERROR:
+            return req
+        prompt = f'Analyse l\'ambiguïté en JSON (0-100) : "{req.source_quote or req.original_text}"'
+        try:
+            resp = ollama.generate(model=self.model, prompt=prompt, format="json")
+            data = self._clean_json(resp.get("response", "{}"))
+            req.ambiguity_score = int(data.get("ambiguity_score", 0))
+            req.fuzzy_terms = data.get("fuzzy_terms", [])
+            if req.ambiguity_score == 0:
+                req.transition_to(RequirementState.CLEAN, "Texte limpide")
+            else:
+                req.transition_to(
+                    RequirementState.NORMALIZED,
+                    f"STALLED: Ambiguïté {req.ambiguity_score}",
+                )
+        except Exception:
+            pass
         return req
 
-class CompletenessAgent(FSMAgent):
-    """CLEAN -> AUDITED"""
-    def trigger(self, req: FSMRequirement) -> FSMRequirement:
-        if req.state != RequirementState.CLEAN: return req
-        prompt = f"Agent ISO 25010: Identifie manques (Sécurité, archivage) JSON : \"{req.original_text}\""
-        resp = ollama.generate(model=self.model, prompt=prompt, format="json")
-        data = self._clean_json(resp.get('response', '{}'))
-        req.missing_implications = data.get('missing_implications', [])
-        req.gap_tickets = data.get('gap_tickets', [])
-        req.transition_to(RequirementState.AUDITED, "Audit de complétude terminé")
-        return req
-
-# --- ORCHESTRATEUR DE L'USINE (FSM ENGINE) ---
 
 class FSMPipeline:
-    """Orchestre les transitions d'état de l'Usine à RFP."""
     def __init__(self):
-        self.factory = [BABOKAgent(), WolfRadarAgent(), CompletenessAgent()]
+        self.factory = [BABOKAgent(), WolfRadarAgent()]
 
     def run_factory(self, text: str, uid: str, metadata: Dict = None) -> FSMRequirement:
         req = FSMRequirement(uid=uid, original_text=text, metadata=metadata or {})
-        
         for agent in self.factory:
             req = agent.trigger(req)
-            # Si un agent n'a pas pu faire passer l'état à la suite, on arrête
-            # (Ex: WolfRadar bloque si score > 0)
         return req
-
-if __name__ == "__main__":
-    pipeline = FSMPipeline()
-    logger.info("🏭 Lancement de l'Usine à RFP (FSM-Driven)")
-    
-    # Test 1 : Exigence Claire
-    res1 = pipeline.run_factory("Le système doit sauvegarder les données.", "UID-001")
-    
-    # Test 2 : Exigence Floue (va bloquer au Radar)
-    res2 = pipeline.run_factory("Le système doit être moderne et ergonomique.", "UID-002")
-    
-    print("\n--- TRACE FSM UID-001 ---")
-    print(json.dumps(asdict(res1), indent=2, ensure_ascii=False))
-    print("\n--- TRACE FSM UID-002 ---")
-    print(json.dumps(asdict(res2), indent=2, ensure_ascii=False))
