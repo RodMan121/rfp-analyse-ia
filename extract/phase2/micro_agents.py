@@ -4,140 +4,143 @@ import ollama
 import json
 from pathlib import Path
 from loguru import logger
-from typing import List, Dict
-from dataclasses import dataclass, asdict
+from typing import List, Dict, Optional
+from dataclasses import dataclass, asdict, field
+from dotenv import load_dotenv
 
-# Fix pour les imports
+# Fix pour les imports et configuration
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(env_path)
 sys.path.append(str(Path(__file__).parent.parent))
 
 @dataclass
 class GranularRequirement:
+    """Modèle de données pour une exigence analysée chirurgicalement."""
     original_text: str
     subject: str = ""
     action: str = ""
     target_object: str = ""
     constraint: str = ""
     condition: str = ""
-    ambiguity_score: int = 0  # 0 = Clair, 100 = Loup total
-    fuzzy_terms: List[str] = None
-    status: str = "VALIDATED"  # VALIDATED | PENDING_CLARIFICATION
-    missing_implications: List[str] = None
-    gap_tickets: List[str] = None
+    ambiguity_score: int = 0
+    fuzzy_terms: List[str] = field(default_factory=list)
+    status: str = "VALIDATED"
+    missing_implications: List[str] = field(default_factory=list)
+    gap_tickets: List[str] = field(default_factory=list)
 
 class GranularAnalysisEngine:
     """
-    Chaîne de montage de micro-agents pour l'analyse déterministe.
+    Moteur déterministe transformant le langage naturel en spécifications techniques.
     """
 
-    def __init__(self, model: str = None):
+    def __init__(self, model: Optional[str] = None):
         self.model = model or os.getenv("OLLAMA_TEXT_MODEL", "qwen2.5:7b")
         logger.info(f"⚙️ Moteur Granulaire prêt (Modèle: {self.model})")
 
     def process_requirement(self, raw_text: str) -> GranularRequirement:
-        """Fait passer une exigence brute par les 3 agents."""
-        req = GranularRequirement(original_text=raw_text, fuzzy_terms=[], missing_implications=[], gap_tickets=[])
+        """Pipeline de traitement par micro-agents."""
+        req = GranularRequirement(original_text=raw_text)
         
-        # 1. Agent Traducteur BABOK
+        # 1. Normalisation BABOK
         req = self._agent_babok(req)
         
-        # 2. Agent Radar à Loups
+        # 2. Radar à Loups
         req = self._agent_radar_loups(req)
         
-        # 3. Agent de Complétude (ISO 25010)
+        # 3. Complétude ISO 25010
         req = self._agent_completude(req)
         
         return req
 
+    def _clean_json_response(self, raw_resp: str) -> str:
+        """Nettoie les éventuelles balises Markdown pour extraire le JSON pur."""
+        clean = raw_resp.strip()
+        if "```json" in clean:
+            clean = clean.split("```json")[1].split("```")[0]
+        elif "```" in clean:
+            clean = clean.split("```")[1].split("```")[0]
+        return clean.strip()
+
     def _agent_babok(self, req: GranularRequirement) -> GranularRequirement:
-        """Normalisation atomique de l'exigence (Version stricte)."""
-        prompt = f"""Tu es l'Agent Traducteur BABOK. Ta mission est la RIGUEUR technique.
-Transforme l'exigence en une structure déterministe. 
+        """Agent Traducteur : Structure Sujet + Action + Objet + Contrainte."""
+        prompt = f"""Tu es l'Agent Traducteur BABOK. 
+Transforme l'exigence suivante en structure déterministe.
 
 STRUCTURE CIBLE :
-- Sujet : L'entité qui agit (ex: Le Système, L'Utilisateur, La Base de données).
-- Action : Le verbe d'action précis (ex: Sauvegarder, Afficher, Vérifier).
-- Objet : Ce sur quoi porte l'action.
-- Contrainte : Limite technique ou temporelle.
-- Condition : Événement déclencheur.
+- Sujet : L'acteur (Le Système, L'Utilisateur, etc.)
+- Action : Le verbe d'action précis
+- Objet : Ce sur quoi porte l'action
+- Contrainte : Limite technique/temporelle
+- Condition : Déclencheur
 
-EXEMPLE :
-"L'accès doit être sécurisé" -> Sujet: "Le Système", Action: "Authentifier", Objet: "L'Utilisateur", Contrainte: "via protocole MFA".
-
-EXIGENCE À TRAITER : "{req.original_text}"
+EXIGENCE : "{req.original_text}"
 
 Réponds UNIQUEMENT en JSON :
 {{
-  "condition": "...",
-  "sujet": "...",
-  "action": "...",
-  "objet": "...",
-  "contrainte": "..."
+  "condition": "...", "sujet": "...", "action": "...", "objet": "...", "contrainte": "..."
 }}"""
         try:
-            resp = ollama.generate(model=self.model, prompt=prompt, format="json")
-            data = json.loads(resp.get('response', '{}'))
+            resp = ollama.generate(model=self.model, prompt=prompt)
+            clean_resp = self._clean_json_response(resp.get('response', '{}'))
+            data = json.loads(clean_resp)
             req.condition = data.get('condition', '')
             req.subject = data.get('sujet', '')
             req.action = data.get('action', '')
             req.target_object = data.get('objet', '')
             req.constraint = data.get('contrainte', '')
-        except: pass
+        except Exception as e:
+            logger.warning(f"⚠️ Erreur Agent BABOK : {e}")
         return req
 
     def _agent_radar_loups(self, req: GranularRequirement) -> GranularRequirement:
-        """Désambiguïsation et traque des termes flous."""
+        """Agent de Désambiguïsation : Traque du flou artistique."""
         prompt = f"""Tu es l'Agent Radar à Loups. 
-Traque les termes flous (ex: ergonomique, rapide, moderne, simple, efficace, etc.).
+Détecte les termes flous (ex: ergonomique, rapide, moderne, simple, efficace).
 
 EXIGENCE : "{req.original_text}"
 
 Réponds UNIQUEMENT en JSON :
 {{
   "ambiguity_score": 0-100,
-  "fuzzy_terms": ["terme1", "terme2"],
+  "fuzzy_terms": ["terme1", "..."],
   "status": "VALIDATED ou PENDING_CLARIFICATION"
 }}"""
         try:
-            resp = ollama.generate(model=self.model, prompt=prompt, format="json")
-            data = json.loads(resp.get('response', '{}'))
+            resp = ollama.generate(model=self.model, prompt=prompt)
+            clean_resp = self._clean_json_response(resp.get('response', '{}'))
+            data = json.loads(clean_resp)
             req.ambiguity_score = data.get('ambiguity_score', 0)
             req.fuzzy_terms = data.get('fuzzy_terms', [])
             req.status = data.get('status', 'VALIDATED')
-        except: pass
+        except Exception as e:
+            logger.warning(f"⚠️ Erreur Agent Loups : {e}")
         return req
 
     def _agent_completude(self, req: GranularRequirement) -> GranularRequirement:
-        """Inférence ISO 25010 pour détecter les exigences implicites manquantes."""
-        prompt = f"""Tu es l'Agent de Complétude (ISO 25010). 
-Identifie les fonctions manquantes induites par cette exigence (ex: Sécurité, Archivage, Suppression, Performance).
+        """Agent ISO 25010 : Inférence de fonctionnalités manquantes."""
+        prompt = f"""Tu es l'Agent de Complétude ISO 25010. 
+Identifie les fonctions implicites manquantes (Sécurité, Archivage, etc.).
 
 EXIGENCE : "{req.original_text}"
 
 Réponds UNIQUEMENT en JSON :
 {{
-  "missing_implications": ["ce qui manque"],
-  "gap_tickets": ["Titre du ticket d'écart à générer"]
+  "missing_implications": ["manque 1", "..."],
+  "gap_tickets": ["Titre du ticket d'écart"]
 }}"""
         try:
-            resp = ollama.generate(model=self.model, prompt=prompt, format="json")
-            data = json.loads(resp.get('response', '{}'))
+            resp = ollama.generate(model=self.model, prompt=prompt)
+            clean_resp = self._clean_json_response(resp.get('response', '{}'))
+            data = json.loads(clean_resp)
             req.missing_implications = data.get('missing_implications', [])
             req.gap_tickets = data.get('gap_tickets', [])
-        except: pass
+        except Exception as e:
+            logger.warning(f"⚠️ Erreur Agent ISO : {e}")
         return req
 
 if __name__ == "__main__":
     engine = GranularAnalysisEngine()
     test_req = "L'application doit être très rapide et permettre le stockage des documents personnels."
-    
-    logger.info(f"🧪 TEST DÉMONSTRATION — CHAÎNE DE MONTAGE")
-    logger.info(f"Phrase source : '{test_req}'")
-    
+    logger.info(f"🧪 Test démonstration : {test_req}")
     result = engine.process_requirement(test_req)
-    
-    import json
-    print("\n" + "="*50)
-    print("🎯 RÉSULTAT DE L'ANALYSE GRANULAIRE")
-    print("="*50)
     print(json.dumps(asdict(result), indent=2, ensure_ascii=False))
-    print("="*50)
