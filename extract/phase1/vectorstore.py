@@ -38,24 +38,30 @@ class VectorStore:
                 logger.warning(f"⚠️ Index BM25 corrompu ({e}).")
 
     def add_fragments_batch(self, fragments: List[Any]) -> int:
-        """Ajout avec IDs déterministes (Hash) pour éviter les collisions."""
+        """Ajout de fragments atomiques avec dédoublonnage et IDs immuables."""
         if not fragments: return 0
 
-        # Génération d'IDs uniques basés sur le contenu
         ids, documents, metadatas = [], [], []
+        seen_ids = set()
+        
         for f in fragments:
-            content = f"SECTION: {f.breadcrumbs}\nCATÉGORIE: {f.category}\n\n{f.text}"
-            fid = hashlib.md5(f"{f.source_file}_{f.page}_{f.text[:100]}".encode()).hexdigest()
-            ids.append(fid)
+            if f.id_hash in seen_ids:
+                continue
+            seen_ids.add(f.id_hash)
+            
+            # f est un objet AtomicDecomposition
+            content = f"SECTION: {f.metadata.get('breadcrumbs')}\nCATÉGORIE: {f.category}\n\n{f.content}"
+            ids.append(f.id_hash)
             documents.append(content)
-            metadatas.append({
-                "source": f.source_file, "section": f.section, 
-                "breadcrumbs": f.breadcrumbs, "page": f.page, "category": f.category
-            })
+            
+            # Métadonnées complètes pour le RAG
+            meta = {**f.metadata, "category": f.category}
+            metadatas.append(meta)
 
-        self.collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
+        if ids:
+            self.collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
 
-        # Mise à jour BM25
+        # Mise à jour de l'index textuel BM25
         new_docs = [{"text": d, "metadata": m} for d, m in zip(documents, metadatas)]
         self.bm25_docs.extend(new_docs)
         tokenized_corpus = [doc["text"].lower().split() for doc in self.bm25_docs]
@@ -65,7 +71,7 @@ class VectorStore:
         with open(self.bm25_path, "wb") as f:
             pickle.dump({"index": self.bm25, "docs": self.bm25_docs}, f)
 
-        logger.success(f"✅ {len(fragments)} fragments indexés.")
+        logger.success(f"✅ {len(fragments)} fragments atomiques indexés dans ChromaDB.")
         return len(fragments)
 
     def search_hybrid(self, query: str, n_results: int = 20) -> List[dict]:

@@ -1,42 +1,47 @@
-# 🏗️ Architecture Déterministe : FSM-Driven Engine
+# 🏗️ Architecture Technique : Gestion des Flux et Cycle de Vie
 
-Ce document décrit l'organisation de l'Usine à RFP basée sur une Machine à État Finis (FSM).
-
----
-
-## 📊 1. Cycle de Vie de l'Exigence
-
-Chaque fragment d'information est un objet `FSMRequirement` qui transite entre les états suivants :
-
-| État | Agent Responsable | Condition de Sortie |
-|---|---|---|
-| **RAW** | `DoclingDecomposer` | Extraction réussie |
-| **CLASSIFIED** | `SemanticRouter` | Contexte métier affecté |
-| **NORMALIZED** | `BABOKAgent` | Structure Sujet-Action-Objet validée |
-| **CLEAN** | `WolfRadarAgent` | **Score d'ambiguïté = 0** |
-| **AUDITED** | `CompletenessAgent` | Inférence ISO 25010 effectuée |
-| **BASELINE** | `ArchitectureComposer` | Intégration dans le rendu final |
+Ce document détaille la transformation des fichiers d'entrée en produits de sortie immuables.
 
 ---
 
-## 🔬 2. Logique de Blocage (Désambiguïsation)
+## 📥 Les Entrées (Single Source of Truth)
 
-L'agent **Radar à Loups** agit comme un gardien de transition. 
-- Si l'IA détecte un adjectif qualitatif non mesurable (*rapide, ergonomique, moderne*), elle refuse la transition vers l'état `CLEAN`.
-- L'exigence est marquée comme `STALLED`. Elle nécessite une intervention humaine ou une clarification client pour reprendre son cycle.
+### 1. Dossier `data/input/`
+Le système est conçu pour traiter des PDF complexes. 
+- **Intégrité :** Le PDF d'origine n'est jamais modifié.
+- **Multi-source :** Vous pouvez mélanger RFP client et catalogues internes en utilisant le paramètre `--collection`.
 
----
-
-## 🎨 3. Synthèse & Baseline Technique
-
-La Phase 3 réassemble uniquement les exigences ayant atteint l'état **AUDITED**.
-- **Technical Baseline :** Un document JSON/Markdown immuable, prêt à être injecté dans un outil d'ALM (Jira, Doors, etc.).
-- **Reverse TOGAF :** Un score d'intégrité (1 à 5) est calculé pour évaluer la cohérence de la Baseline sur les domaines Métier, Données, Application et Technologie.
+### 2. Fichier `data/prompt.md`
+Utilisé par l'Agent QA (`rfp_agent.py`) pour des requêtes complexes.
+- **Rôle :** Permet de structurer des prompts multi-lignes, incluant des exemples ou des contraintes de formatage pour l'IA.
 
 ---
 
-## 🛠️ Stack Technique
-- **Pipeline Orchestrator :** `FSMPipeline` (Python).
-- **LLM :** Ollama (Qwen 2.5).
-- **Standards :** BABOK, ISO 25010, TOGAF.
-- **Trace :** Historique d'état immuable par objet.
+## 📤 Les Sorties (Technical Artifacts)
+
+### 1. Vision : `data/output_images/`
+Lors de la Phase 1 (Dissocier), Docling extrait chaque page en PNG.
+- **Utilité :** Ces images servent de "preuve visuelle" pour le modèle **Llama 3.2 Vision**. L'agent s'y réfère pour analyser les diagrammes ou les tableaux complexes.
+
+### 2. Cache : `data/output_json/`
+Contient les fichiers `.fragments.json`.
+- **Rôle :** Stocke la décomposition structurelle (titres, paragraphes, métadonnées).
+- **Vérification de fraîcheur :** Le système compare la date du PDF avec celle du JSON. Si le PDF change, le cache est invalidé.
+
+### 3. Rapports Stratégiques (`.md`)
+- **`granular_audit_report.md` :** Sortie de la Phase 2. Met en évidence les risques sémantiques (loups) et les suggestions ISO 25010.
+- **`gap_analysis_report.md` :** Synthèse métier. Compare les exigences validées avec votre savoir-faire.
+
+### 4. Database : `data/chroma_db_hierarchical/`
+La base vectorielle ChromaDB.
+- **ID MD5 :** Chaque fragment est scellé par un ID unique calculé sur son contenu.
+- **États FSM :** La base stocke l'état courant de l'exigence (`RAW` ➔ `BASELINE`).
+
+---
+
+## 📊 Résumé de la Transformation
+
+```text
+[PDF Brut] ➔ [PNG + JSON Cache] ➔ [Vecteurs ChromaDB] ➔ [Rapports Markdown]
+   (RAW)          (CLASSIFIED)         (NORMALIZED)          (BASELINE)
+```
