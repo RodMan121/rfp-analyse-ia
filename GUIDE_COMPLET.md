@@ -1,40 +1,40 @@
-# 📖 Manuel Opérationnel — Méthodologie Augmented BID
+# 📖 Guide de l'Usine à RFP : Logique FSM
 
-Ce guide explique comment appliquer la logique "Dissocier & Traiter" avec les outils du projet.
-
----
-
-## 🏭 Phase 1 : Dissocier (Ingestion)
-
-L'ingestion n'est pas qu'une simple lecture, c'est une **décomposition chirurgicale**.
-
-### 📥 `main.py` & `local_parser.py`
-Ces scripts extraient les "objets" du PDF. Chaque objet JSON est scellé par un ID MD5 unique.
-- **Règle d'Immuabilité :** Une fois indexé, un fragment ne change plus. Il est ancré à sa page et sa section. Cela garantit que l'IA ne pourra jamais "inventer" une source qui n'existe pas.
-
-### 🏷️ Le Classifier
-Il affecte un contexte métier (TECHNIQUE, JURIDIQUE, etc.). Ce contexte est crucial pour la Phase 2 car il définit les règles de complétude à appliquer.
+Ce guide explique comment piloter le cycle de vie des exigences dans le système.
 
 ---
 
-## 🔬 Phase 2 : Traiter (Micro-Agents)
+## 🏭 Le Concept : Une Usine à État
 
-Le traitement granulaire élimine l'incertitude humaine.
+Dans ce projet, une exigence n'est pas juste un texte, c'est une entité qui "grandit" à travers des états.
 
-### 🤖 `micro_agents.py` (La Chaîne de Montage)
-Chaque exigence détectée passe par trois stations de travail :
+### 🧩 1. États Initiaux (Phase 1)
+- **RAW** : Le texte vient d'être extrait du PDF.
+- **CLASSIFIED** : On sait si c'est du technique, du prix ou de la sécurité.
 
-1.  **Station BABOK :** On réécrit l'exigence. Fini le "Il faudrait que...". On veut : `Sujet` + `Action` + `Objet`.
-2.  **Station Radar à Loups :** On calcule le score d'ambiguïté. Si vous voyez un score élevé dans `granular_audit_report.md`, l'exigence est "bloquée". Vous devez demander des précisions au client.
-3.  **Station ISO 25010 :** L'agent vérifie ce que le client a oublié.
-    - *Exemple :* Le document parle de "données bancaires" mais pas de "chiffrement". L'agent génère un **Gap Ticket**.
+### ⚙️ 2. Traitement Déterministe (Phase 2)
+- **NORMALIZED** : L'IA a réécrit la phrase en Sujet-Action-Objet.
+- **CLEAN** : L'IA confirme qu'il n'y a plus aucun mot flou (Score = 0). **Attention :** Si le client a écrit "très rapide", l'exigence reste bloquée ici.
+- **AUDITED** : On a vérifié ce qui manquait (ISO 25010).
+
+### 📦 3. Rendu Final (Phase 3)
+- **BASELINE** : L'exigence est intégrée dans le catalogue final du projet.
 
 ---
 
-## 🚀 Résumé des Commandes Stratégiques
+## 🚦 Comment débloquer une exigence ?
 
-| Action | Commande | Livrable |
+Si vous voyez une exigence bloquée à l'état `NORMALIZED` (Ambiguïté > 0) :
+1.  Consultez le `fuzzy_terms` dans le rapport granulaire.
+2.  Clarifiez le point avec votre client.
+3.  Une fois le texte précis injecté, l'IA validera le passage à l'état `CLEAN`.
+
+---
+
+## 🚀 Commandes de Contrôle
+
+| Action | Commande | État Cible |
 |---|---|---|
-| **Dissocier** | `python main.py --input doc.pdf` | Base Immuable |
-| **Traiter** | `python granular_audit.py` | Rapport de Désambiguïsation |
-| **Comparer** | `python compliance.py` | Matrice GTM Finale |
+| **Démarrage** | `python main.py` | RAW ➔ CLASSIFIED |
+| **Audit FSM** | `python granular_audit.py` | ➔ AUDITED |
+| **Génération** | `python phase3/composer.py` | ➔ BASELINE |
