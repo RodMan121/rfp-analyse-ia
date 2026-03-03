@@ -1,7 +1,12 @@
 import os
+import sys
 import ollama
 import json
 from pathlib import Path
+
+# Fix pour permettre l'importation de phase1 depuis le dossier parent
+sys.path.append(str(Path(__file__).parent.parent))
+
 from loguru import logger
 from typing import List, Dict
 from concurrent.futures import ThreadPoolExecutor
@@ -28,42 +33,85 @@ class ComplianceAuditAgent:
         logger.info(f"🛡️ Agent d'Audit prêt (Modèle: {self.model})")
 
     def extract_requirements(self, category: str = "GENERAL") -> List[Dict]:
-        """Extraction des exigences."""
+        """Extraction des exigences avec prompt assoupli."""
         logger.info(f"🔎 Audit de la catégorie : {category}...")
+        
+        # On cherche les fragments de la catégorie
         fragments = self.rfp_store.search_hybrid(query=f"CATÉGORIE: {category}", n_results=15)
-        if not fragments: return []
+        if not fragments: 
+            logger.warning(f"⚠️ Aucun fragment trouvé pour {category}")
+            return []
 
         all_requirements = []
         for frag in fragments:
-            prompt = f"FRAGMENT :\n{frag['text']}\n\nExtraie les exigences précises en JSON : [{\"exigence\": \"...\", \"priorite\": \"...\"}]"
+            text = frag['text']
+            # Prompt plus simple et direct
+            prompt = f"""Tu es un expert senior en réponse aux appels d'offres.
+Lis ce fragment de document et liste TOUTES les obligations, contraintes ou besoins techniques qu'il contient.
+
+FRAGMENT :
+{text}
+
+Réponds UNIQUEMENT au format JSON comme ceci :
+[
+  {{"exigence": "Description de l'obligation", "priorite": "HAUTE/MOYENNE/BASSE"}}
+]
+Si aucune obligation n'est présente, réponds []."""
+            
             try:
-                response = ollama.generate(model=self.model, prompt=prompt, format="json")
-                reqs = json.loads(response.get('response', '[]'))
-                for r in reqs:
-                    r['source'] = f"{frag['metadata']['breadcrumbs']} (P.{frag['metadata']['page']})"
-                    all_requirements.append(r)
+                # Utilisation sans format="json" forcé pour plus de flexibilité, puis nettoyage manuel
+                response = ollama.generate(model=self.model, prompt=prompt)
+                raw_resp = response.get('response', '[]').strip()
+                
+                # Nettoyage Markdown si l'IA en a mis
+                if "```json" in raw_resp:
+                    raw_resp = raw_resp.split("```json")[1].split("```")[0]
+                elif "```" in raw_resp:
+                    raw_resp = raw_resp.split("```")[1].split("```")[0]
+                
+                reqs = json.loads(raw_resp)
+                
+                if isinstance(reqs, list):
+                    for r in reqs:
+                        if isinstance(r, dict) and "exigence" in r:
+                            r['source'] = f"{frag['metadata']['breadcrumbs']} (P.{frag['metadata']['page']})"
+                            all_requirements.append(r)
             except Exception as e:
-                logger.warning(f"⚠️ Échec extraction : {e}")
+                logger.debug(f"⚠️ Erreur parsing exigence : {e}")
+        
+        logger.info(f"✅ {len(all_requirements)} exigences extraites pour {category}.")
         return all_requirements
 
     def _analyze_single_gap(self, req: Dict) -> Dict:
-        """Analyse d'une seule exigence (copie pour parallélisme)."""
+        """Analyse d'une seule exigence."""
         result = {**req}
         know_how = self.catalog_store.search_hybrid(query=result['exigence'], n_results=3)
         context = "\n".join([k['text'] for k in know_how]) if know_how else "AUCUN SAVOIR-FAIRE TROUVÉ."
         
-        prompt = f"EXIGENCE : {result['exigence']}\nSAVOIR-FAIRE : {context}\n\nDétermine la conformité en JSON : {\"statut\": \"...\", \"justification\": \"...\", \"score_confiance\": 0}"
+        prompt = f"""EXIGENCE CLIENT : {result['exigence']}
+NOTRE RÉFÉRENTIEL : {context}
+
+Détermine notre niveau de conformité.
+Réponds UNIQUEMENT en JSON :
+{{
+  "statut": "CONFORME / PARTIEL / NON_CONFORME",
+  "justification": "Explication courte",
+  "score_confiance": 0-100
+}}"""
+        
         try:
-            response = ollama.generate(model=self.model, prompt=prompt, format="json")
-            gap = json.loads(response.get('response', '{}'))
+            response = ollama.generate(model=self.model, prompt=prompt)
+            raw_resp = response.get('response', '{}').strip()
+            if "```json" in raw_resp:
+                raw_resp = raw_resp.split("```json")[1].split("```")[0]
+            gap = json.loads(raw_resp)
             result.update(gap)
-        except Exception as e:
-            logger.warning(f"⚠️ Échec Gap Analysis : {e}")
+        except:
             result.update({"statut": "ERREUR", "score_confiance": 0})
         return result
 
     def analyze_gap(self, requirements: List[Dict]) -> List[Dict]:
-        """Analyse parallélisée."""
+        if not requirements: return []
         workers = int(os.getenv("OLLAMA_NUM_PARALLEL", "1"))
         logger.info(f"🧠 Gap Analysis ({workers} workers) sur {len(requirements)} points...")
         with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -71,19 +119,25 @@ class ComplianceAuditAgent:
         return results
 
     def generate_report(self, analysis: List[Dict]) -> str:
+        if not analysis: return "# 📋 Aucune exigence trouvée."
         report = "# 📋 Matrice de Conformité & Gap Analysis (GTM)\n\n"
         report += "| Statut | Confiance | Priorité | Exigence | Source | Justification |\n"
         report += "|--------|-----------|----------|----------|--------|---------------|\n"
         for r in analysis:
-            s_emoji = "✅" if r.get('statut') == "CONFORME" else "⚠️" if r.get('statut') == "PARTIEL" else "❌"
-            report += f"| {s_emoji} | {r.get('score_confiance', 0)}% | {r.get('priorite')} | {r['exigence']} | {r['source']} | {r.get('justification')} |\n"
+            status = r.get('statut', 'INCONNU')
+            s_emoji = "✅" if "CONFORME" in status and "NON" not in status else "⚠️" if "PARTIEL" in status else "❌"
+            conf = f"{r.get('score_confiance', 0)}%"
+            report += f"| {s_emoji} {status} | {conf} | {r.get('priorite')} | {r['exigence']} | {r['source']} | {r.get('justification')} |\n"
         return report
 
 if __name__ == "__main__":
     audit = ComplianceAuditAgent()
-    reqs = audit.extract_requirements(category="TECHNIQUE")
-    results = audit.analyze_gap(reqs)
-    output_path = Path("data/gap_analysis_report.md")
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(audit.generate_report(results))
-    logger.success(f"✅ Audit terminé : {output_path}")
+    all_results = []
+    for cat in ["TECHNIQUE", "SECURITE"]:
+        reqs = audit.extract_requirements(category=cat)
+        results = audit.analyze_gap(reqs)
+        all_results.extend(results)
+    
+    with open("data/gap_analysis_report.md", "w", encoding="utf-8") as f:
+        f.write(audit.generate_report(all_results))
+    logger.success(f"✅ Audit terminé.")

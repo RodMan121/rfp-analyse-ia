@@ -2,6 +2,7 @@ import os
 import pathlib
 import re
 import json
+import unicodedata
 from dataclasses import dataclass
 from loguru import logger
 from docling.document_converter import DocumentConverter, PdfFormatOption
@@ -29,7 +30,6 @@ class DoclingParser:
     def __init__(self, image_output_dir: str = None, cache_dir: str = None):
         logger.info("🤖 Initialisation du Parser Hiérarchique...")
         
-        # Chemins pilotés par .env
         self.image_output_dir = pathlib.Path(image_output_dir or os.getenv("OUTPUT_IMAGE_DIR", "data/output_images"))
         self.cache_dir = pathlib.Path(cache_dir or os.getenv("OUTPUT_JSON_DIR", "data/output_json"))
         
@@ -47,26 +47,35 @@ class DoclingParser:
         )
 
         self.categories = {
-            "ADMIN": ["administratif", "candidature", "justificatif", "éligibilité", "assurance"],
-            "TECHNIQUE": ["spécification", "besoin", "exigence", "fonctionnement", "architecture", "technique"],
-            "FINANCIER": ["prix", "coût", "facturation", "budget", "montant", "paiement", "pénalité"],
-            "JURIDIQUE": ["clause", "contrat", "litige", "résiliation", "droit", "propriété intellectuelle"],
-            "PLANNING": ["délai", "calendrier", "jalon", "livraison", "durée", "planning"],
-            "SECURITE": ["iso", "sécurité", "rgpd", "données", "confidentialité", "protection"]
+            "ADMIN": ["administratif", "candidature", "justificatif", "éligibilité", "assurance", "attestation", "agrément"],
+            "TECHNIQUE": ["spécification", "besoin", "exigence", "fonctionnement", "architecture", "technique", "solution", "logiciel", "matériel", "infrastructure"],
+            "FINANCIER": ["prix", "coût", "facturation", "budget", "montant", "paiement", "pénalité", "unitaire", "forfait", "devis"],
+            "JURIDIQUE": ["clause", "contrat", "litige", "résiliation", "droit", "propriété", "juridique", "responsabilité", "loi"],
+            "PLANNING": ["délai", "calendrier", "jalon", "livraison", "durée", "planning", "planning", "planning", "mise en service"],
+            "SECURITE": ["iso", "sécurité", "rgpd", "données", "confidentialité", "protection", "habilité", "authentification", "chiffrement"]
         }
 
+    def _strip_accents(self, s):
+        return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+
     def _get_semantic_category(self, text: str, breadcrumbs: str) -> str:
-        """Détermine la catégorie métier."""
-        context = (text + " " + breadcrumbs).lower()
+        """Détermine la catégorie métier par score de mots-clés robuste."""
+        context = self._strip_accents((text + " " + breadcrumbs).lower())
         scores = {cat: 0 for cat in self.categories}
+        
         for cat, keywords in self.categories.items():
             for kw in keywords:
-                if kw in context: scores[cat] += 1
+                kw_clean = self._strip_accents(kw.lower())
+                if kw_clean in context:
+                    # Plus le mot clé est long, plus il a de poids
+                    scores[cat] += len(kw_clean)
+        
+        if not scores: return "GENERAL"
+        
         best_cat = max(scores, key=scores.get)
         return best_cat if scores[best_cat] > 0 else "GENERAL"
 
     def _safe_chunk(self, text: str, max_chars: int = 1500, overlap: int = 200) -> list[str]:
-        """Découpe sans perte finale."""
         if len(text) <= max_chars: return [text]
         chunks, start = [], 0
         while start < len(text):
@@ -77,19 +86,13 @@ class DoclingParser:
         return chunks
 
     def parse_to_fragments(self, filepath: str | pathlib.Path) -> list[LocalRawFragment]:
-        """Analyse avec vérification de fraîcheur cache."""
         filepath = pathlib.Path(filepath)
         source_name = filepath.name
         fragment_cache = self.cache_dir / f"{filepath.stem}.fragments.json"
 
-        if fragment_cache.exists() and fragment_cache.stat().st_mtime > filepath.stat().st_mtime:
-            logger.info(f"♻️ Chargement du cache valide : {fragment_cache.name}")
-            try:
-                with open(fragment_cache, "r", encoding="utf-8") as f:
-                    cached_data = json.load(f)
-                return [LocalRawFragment(**fr) for fr in cached_data]
-            except Exception as e:
-                logger.warning(f"⚠️ Cache illisible ({e})")
+        # On force le re-parsing si on vient de modifier la logique de tagging
+        # Pour ce test, on va supprimer le cache si présent ou juste l'ignorer
+        # if fragment_cache.exists(): os.remove(fragment_cache)
 
         logger.info(f"📄 Analyse complète : {filepath}")
         result = self.converter.convert(filepath)
@@ -119,9 +122,7 @@ class DoclingParser:
                     raw_text = f"\n[TABLEAU]\n{item.export_to_markdown()}\n[/TABLEAU]\n" if hasattr(item, "export_to_markdown") else item.text
                 else: raw_text = item.text if hasattr(item, "text") else ""
                 if not raw_text or len(raw_text.strip()) < 5: continue
-            except Exception as e:
-                logger.debug(f"⚠️ Fragment sauté : {e}")
-                continue
+            except Exception as e: logger.debug(f"⚠️ Fragment sauté : {e}"); continue
 
             if "heading" in label or "title" in label or "header" in label:
                 depth = level if level is not None else 0
