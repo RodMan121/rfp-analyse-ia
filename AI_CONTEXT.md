@@ -1,19 +1,19 @@
 # 🤖 Contexte pour l'IA (Instructions de Développement V2.1)
 
-Ce fichier est destiné aux agents IA (Cursor, Windsurf, Gemini) travaillant sur ce projet.
+Ce fichier définit les règles d'or pour le développement futur du projet.
 
-## 🏗️ Principes Architecturaux
-- **Hybrid Search RRF** : Toujours utiliser la fusion Vecteurs + BM25 pour la précision.
-- **Micro-Agents Determinism** : Pour l'analyse stratégique, utiliser la chaîne de montage : `BABOK -> WOLF -> ISO`.
-- **Local-First** : Priorité absolue aux modèles Ollama locaux.
+## 🏗️ Principes de Développement
+- **Chain of Thought (CoT)** : Les analyses métier doivent passer par une chaîne de micro-agents (`BABOK -> WOLF -> ISO`).
+- **Déterminisme** : Transformer le langage naturel flou en structures Sujet/Action/Objet.
+- **Local-First** : Priorité absolue aux modèles Ollama (Qwen 2.5).
 
-## 🛠️ Stack Technique & Micro-Agents
-- **Agent BABOK** : Normalisation atomique (`extract/phase2/micro_agents.py`).
-- **Agent Radar à Loups** : Calcul de l'ambiguïté.
-- **Agent de Complétude** : Inférence ISO 25010.
-- **Orchestration** : `extract/granular_audit.py`.
+## 🔬 Les 3 Micro-Agents (Phase 2.1)
+1.  **Agent BABOK** : Normalisation structurelle (Sujet, Action, Objet, Contrainte).
+2.  **Agent Radar à Loups** : Calcul du score d'ambiguïté (0-100) et détection des termes qualitatifs.
+3.  **Agent ISO 25010** : Inférence sur les fonctionnalités implicites manquantes (Sécurité, Archivabilité, etc.).
 
-## ⚠️ Vigilance Code
-- **JSON Formatting** : Les Micro-Agents attendent des réponses JSON strictes.
-- **Race Conditions** : La Gap Analysis est parallélisée, attention aux accès concurrents sur les ressources partagées (bien que ChromaDB gère cela).
-- **PEP8** : Pas de points-virgules, typage statique obligatoire.
+## ⚠️ Standards Techniques
+- **JSON Robustness** : Utiliser `_clean_json_response` pour extraire les données des réponses LLM.
+- **Type Safety** : Utiliser `dataclasses` et Type Hints Python.
+- **Robustness** : Jamais de `bare except:`. Logging systématique avec `loguru`.
+- **PEP8** : Une instruction par ligne, pas de `;`.
