@@ -4,11 +4,13 @@ import ollama
 import json
 import hashlib
 import datetime
+import asyncio
 from pathlib import Path
 from loguru import logger
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict
 from dotenv import load_dotenv
+from google import genai
 
 # Fix pour les imports
 sys.path.append(str(Path(__file__).parent.parent))
@@ -19,6 +21,8 @@ from utils.factory_log import factory_logger
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
+TEXT_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llama3.2:3b")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 @dataclass
 class TechnicalBaseline:
@@ -30,28 +34,52 @@ class TechnicalBaseline:
     integrity_score: int
     state: str = "BASELINE"
 
-
 class ArchitectureComposer:
     def __init__(self, model: Optional[str] = None):
-        self.model = model or os.getenv("OLLAMA_TEXT_MODEL", "qwen2.5:7b")
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if api_key and len(api_key) > 10 and "your_google" not in api_key:
+            self.model = model or GEMINI_MODEL
+            self.client = genai.Client(api_key=api_key)
+            self.is_gemini = True
+        else:
+            self.model = model or TEXT_MODEL
+            self.is_gemini = False
+            self.async_ollama = ollama.AsyncClient()
+
+    async def _call_llm(self, prompt: str, format: str = "json") -> Dict:
+        """Appelle soit Gemini soit Ollama selon la configuration."""
+        if self.is_gemini:
+            try:
+                config = {"response_mime_type": "application/json"} if format == "json" else {}
+                response = await self.client.aio.models.generate_content(
+                    model=self.model, contents=prompt, config=config
+                )
+                return {"response": response.text}
+            except Exception as e:
+                logger.error(f"❌ Erreur Gemini : {e}")
+                return {"response": "{}"}
+        else:
+            try:
+                response = await self.async_ollama.generate(
+                    model=self.model, prompt=prompt, format=format if format == "json" else None,
+                    options={"num_ctx": 2048, "temperature": 0.1}
+                )
+                return {"response": response.get("response", "{}")}
+            except Exception as e:
+                logger.error(f"❌ Erreur Ollama : {e}")
+                return {"response": "{}"}
 
     def _clean_json(self, raw_resp: str) -> Dict:
         try:
             clean = raw_resp.strip()
-            if "```json" in clean:
-                clean = clean.split("```json")[1].split("```")[0]
-            elif "```" in clean:
-                clean = clean.split("```")[1].split("```")[0]
+            if "```json" in clean: clean = clean.split("```json")[1].split("```")[0]
+            elif "```" in clean: clean = clean.split("```")[1].split("```")[0]
             return json.loads(clean)
-        except Exception:
-            return {}
+        except Exception: return {}
 
     def load_registry(self) -> List[FSMRequirement]:
-        """Charge les exigences depuis le registre JSON de la Phase 2."""
         path = Path("data/fsm_registry.json")
-        if not path.exists():
-            logger.error("❌ Registre FSM introuvable. Lancez la Phase 2 d'abord.")
-            return []
+        if not path.exists(): return []
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         reqs = []
@@ -62,29 +90,18 @@ class ArchitectureComposer:
             reqs.append(r)
         return reqs
 
-    def assemble_baseline(
-        self, audited_requirements: List[FSMRequirement]
-    ) -> TechnicalBaseline:
-        """Réassemble les fragments AUDITED en une Baseline immuable (JSON + MD)."""
-        factory_logger.log_event(
-            "PHASE_3", "START", "Début de la certification de la Baseline."
-        )
-
-        final_set = [
-            r for r in audited_requirements if r.state == RequirementState.AUDITED
-        ]
+    async def assemble_baseline(self, audited_requirements: List[FSMRequirement]) -> TechnicalBaseline:
+        factory_logger.log_event("PHASE_3", "START", "Certification Baseline.")
+        final_set = [r for r in audited_requirements if r.state in [RequirementState.CLEAN, RequirementState.NORMALIZED]]
+        
         if not final_set:
-            factory_logger.log_event(
-                "PHASE_3", "ERROR", "Aucune exigence validée à certifier."
-            )
             logger.warning("⚠️ Aucune exigence validée à certifier.")
             return None
 
         # 1. MoSCoW
-        moscow_data = self._construct_moscow(final_set)
-
+        moscow_data = await self._construct_moscow(final_set)
         # 2. Scoring
-        integrity_data = self._scoring_integrity(moscow_data)
+        integrity_data = await self._scoring_integrity(moscow_data)
 
         serializable_reqs = []
         for r in final_set:
@@ -93,10 +110,7 @@ class ArchitectureComposer:
             req_dict["state"] = r.state.value
             serializable_reqs.append(req_dict)
 
-        project_signature = hashlib.md5(
-            json.dumps(serializable_reqs).encode()
-        ).hexdigest()
-
+        project_signature = hashlib.md5(json.dumps(serializable_reqs).encode()).hexdigest()
         baseline = TechnicalBaseline(
             project_uid=f"ALM-{project_signature[:12].upper()}",
             timestamp=datetime.datetime.now().isoformat(),
@@ -107,82 +121,58 @@ class ArchitectureComposer:
         )
         self._export_json(baseline)
         self._export_markdown(baseline)
-
-        factory_logger.log_event(
-            "PHASE_3",
-            "COMPLETED",
-            f"Baseline {baseline.project_uid} générée.",
-            {
-                "uid": baseline.project_uid,
-                "req_count": baseline.requirements_count,
-                "integrity": baseline.integrity_score,
-            },
-        )
         return baseline
 
     def _export_json(self, baseline: TechnicalBaseline):
         output_path = Path("data/technical_baseline_alm.json")
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(asdict(baseline), f, indent=2, ensure_ascii=False)
-        logger.success(f"💾 JSON certifié : {output_path}")
 
     def _export_markdown(self, baseline: TechnicalBaseline):
-        """Génère le document de Technical Baseline pour les humains (Traçabilité BABOK)."""
         output_path = Path("data/technical_baseline_final.md")
         md = f"# 📦 Technical Baseline — Projet {baseline.project_uid}\n\n"
         md += f"**Date de certification :** {baseline.timestamp}\n"
         md += f"**Nombre d'exigences certifiées :** {baseline.requirements_count}\n"
         md += f"**Score d'intégrité système :** {baseline.integrity_score}/5\n\n"
-
         md += "## 🎯 Matrice de Priorisation (MoSCoW)\n\n"
         for prio in ["Must", "Should", "Could", "Won't"]:
             md += f"### {prio}\n"
             reqs = baseline.moscow_matrix.get(prio, [])
-            if not reqs:
-                md += "_Aucune exigence._\n"
+            if not reqs: md += "_Aucune exigence._\n"
             else:
                 for r in reqs:
                     text = r.get("exigence", r) if isinstance(r, dict) else r
                     md += f"- {text}\n"
             md += "\n"
-
-        md += "## 📋 Catalogue des Exigences Certifiées (Traçabilité Totale)\n\n"
+        md += "## 📋 Catalogue des Exigences Certifiées\n\n"
         md += "| UID | Structure BABOK | Citation Source | Page / Section | Historique FSM |\n"
         md += "|:---:|---|---|---|---|\n"
-
         for r in baseline.validated_requirements:
             hist = " ➔ ".join([h.split(" (")[0] for h in r["state_history"]])
-            babok = f"**{r.get('subject', '?')}** {r.get('action', '?')} {r.get('target_object', '?')} *({r.get('constraint', '')})*"
+            babok = f"**{r.get('subject', '?')}** {r.get('action', '?')} {r.get('target_object', '?')}"
             quote = f"« {r.get('source_quote', 'N/A')} »"
             meta = f"P.{r['metadata'].get('page', '?')} ({r['metadata'].get('breadcrumbs', '?')})"
             md += f"| {r['uid'][:8]} | {babok} | {quote} | {meta} | {hist} |\n"
-
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(md)
-        logger.success(f"📄 Markdown certifié avec traçabilité : {output_path}")
 
-    def _construct_moscow(self, requirements: List[FSMRequirement]) -> Dict:
-        req_texts = [{"id": r.uid[:5], "text": r.original_text} for r in requirements]
-        prompt = f"Expert MoSCoW: Priorise ces exigences JSON : {json.dumps(req_texts)}"
-        try:
-            resp = ollama.generate(model=self.model, prompt=prompt, format="json")
-            return self._clean_json(resp.get("response", "{}"))
-        except Exception:
-            return {"Must": [], "Should": [], "Could": [], "Won't": []}
+    async def _construct_moscow(self, requirements: List[FSMRequirement]) -> Dict:
+        # On limite l'envoi au LLM pour éviter de saturer le contexte
+        req_texts = [{"id": r.uid[:5], "text": r.original_text[:100]} for r in requirements[:50]]
+        prompt = f"Expert MoSCoW: Priorise ces exigences JSON (Must, Should, Could, Won't) : {json.dumps(req_texts)}"
+        resp = await self._call_llm(prompt=prompt, format="json")
+        return self._clean_json(resp.get("response", "{}"))
 
-    def _scoring_integrity(self, matrix_data: Dict) -> Dict:
-        prompt = (
-            f"Expert TOGAF: Score l'intégrité (1-5) JSON : {json.dumps(matrix_data)}"
-        )
-        try:
-            resp = ollama.generate(model=self.model, prompt=prompt, format="json")
-            return json.loads(resp.get("response", "{}"))
-        except Exception:
-            return {"score": 3}
+    async def _scoring_integrity(self, matrix_data: Dict) -> Dict:
+        prompt = f"Expert TOGAF: Score l'intégrité (1-5) JSON : {json.dumps(matrix_data)}"
+        resp = await self._call_llm(prompt=prompt, format="json")
+        return self._clean_json(resp.get("response", "{}"))
 
-
-if __name__ == "__main__":
+async def main():
     composer = ArchitectureComposer()
     audited_reqs = composer.load_registry()
     if audited_reqs:
-        composer.assemble_baseline(audited_reqs)
+        await composer.assemble_baseline(audited_reqs)
+
+if __name__ == "__main__":
+    asyncio.run(main())

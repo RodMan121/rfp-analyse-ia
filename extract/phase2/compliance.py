@@ -3,12 +3,13 @@ import sys
 import ollama
 import json
 from pathlib import Path
+from google import genai
 
 # Fix pour permettre l'importation de phase1 depuis le dossier parent
 sys.path.append(str(Path(__file__).parent.parent))
 
 from loguru import logger
-from typing import List, Dict
+from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 from phase1.vectorstore import VectorStore
@@ -19,13 +20,14 @@ env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
 TEXT_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "qwen2.5:7b")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 DEFAULT_DB_PATH = os.getenv("CHROMA_DB_PATH", "data/chroma_db_hierarchical")
 
 
 class ComplianceAuditAgent:
     """Agent d'Audit avec Gap Analysis sécurisé."""
 
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_path: Optional[str] = None):
         db_path = db_path or DEFAULT_DB_PATH
         self.rfp_store = VectorStore(
             db_path=db_path, collection_name="rfp_hierarchical"
@@ -34,8 +36,57 @@ class ComplianceAuditAgent:
             db_path=db_path, collection_name="service_catalog"
         )
         self.reranker = LocalReranker()
-        self.model = TEXT_MODEL
+
+        # Priorité : Argument > GEMINI_MODEL (si API KEY) > OLLAMA_TEXT_MODEL
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if api_key and api_key != "your_google_api_key_here":
+            self.model = GEMINI_MODEL
+            self.client = genai.Client(api_key=api_key)
+            self.is_gemini = True
+        else:
+            self.model = TEXT_MODEL
+            self.is_gemini = False
+
         logger.info(f"🛡️ Agent d'Audit prêt (Modèle: {self.model})")
+
+    def _call_llm(self, prompt: str, format: str = "json") -> Dict:
+        """Appelle soit Gemini soit Ollama selon la configuration avec gestion de retry."""
+        import time
+
+        max_retries = 5
+        base_delay = 2  # secondes
+
+        for attempt in range(max_retries):
+            if self.is_gemini:
+                try:
+                    config = {}
+                    if format == "json":
+                        config["response_mime_type"] = "application/json"
+
+                    response = self.client.models.generate_content(
+                        model=self.model, contents=prompt, config=config
+                    )
+                    return {"response": response.text}
+                except Exception as e:
+                    if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                        delay = base_delay * (2**attempt)
+                        logger.warning(
+                            f"⚠️ Quota Gemini atteint (429). Pause de {delay}s avant essai {attempt + 1}/{max_retries}..."
+                        )
+                        time.sleep(delay)
+                        continue
+                    else:
+                        logger.error(f"❌ Erreur Gemini critique : {e}")
+                        return {"response": "{}"}
+            else:
+                try:
+                    return ollama.generate(model=self.model, prompt=prompt, format=format)
+                except Exception as e:
+                    logger.error(f"❌ Erreur Ollama : {e}")
+                    return {"response": "{}"}
+
+        logger.error(f"🚫 Échec après {max_retries} tentatives suite à des erreurs de quota.")
+        return {"response": "{}"}
 
     def extract_requirements(self, category: str = "GENERAL") -> List[Dict]:
         """Extraction des exigences avec prompt assoupli."""
@@ -67,7 +118,7 @@ Si aucune obligation n'est présente, réponds []."""
 
             try:
                 # Utilisation sans format="json" forcé pour plus de flexibilité, puis nettoyage manuel
-                response = ollama.generate(model=self.model, prompt=prompt)
+                response = self._call_llm(prompt=prompt, format="json")
                 raw_resp = response.get("response", "[]").strip()
 
                 # Nettoyage Markdown si l'IA en a mis
@@ -115,7 +166,7 @@ Réponds UNIQUEMENT en JSON :
 }}"""
 
         try:
-            response = ollama.generate(model=self.model, prompt=prompt)
+            response = self._call_llm(prompt=prompt, format="json")
             raw_resp = response.get("response", "{}").strip()
             if "```json" in raw_resp:
                 raw_resp = raw_resp.split("```json")[1].split("```")[0]
