@@ -24,7 +24,9 @@ class RFPAgent:
     Supporte le texte, la vision (non-streamée), la mémoire et le streaming textuel.
     """
 
-    def __init__(self, db_path: str = "data/chroma_db_hierarchical"):
+    def __init__(self, db_path: str = None):
+        # Utilisation du chemin configuré dans .env
+        db_path = db_path or os.getenv("CHROMA_DB_PATH", "data/chroma_db_hierarchical")
         self.store = VectorStore(db_path=db_path)
         self.reranker = LocalReranker()
         

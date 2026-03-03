@@ -27,7 +27,6 @@ class RawFragment:
     page: int
     source_file: str
     fragment_type: str = "texte"
-    visual_context: str | None = None
 
 @dataclass
 class DiagramRelation:
@@ -72,7 +71,6 @@ class GeminiDocumentParser:
         logger.info("🧠 Analyse multimodale Gemini...")
         raw_response = self._call_gemini(uploaded_file)
         
-        # Nettoyage
         try:
             self.client.files.delete(name=uploaded_file.name)
         except Exception as e:
@@ -81,7 +79,6 @@ class GeminiDocumentParser:
         return self._parse_response(raw_response, path.name)
 
     def _upload_file(self, path: pathlib.Path, mime_type: str):
-        """Upload avec timeout de sécurité."""
         uploaded = self.client.files.upload(
             file=path, 
             config={"display_name": path.name, "mime_type": mime_type}
@@ -111,8 +108,6 @@ class GeminiDocumentParser:
         clean = raw_response.strip().replace("```json", "").replace("```", "").strip()
         try:
             data = json.loads(clean)
-            
-            # 1. Fragments
             frags = []
             for f in data.get('fragments', []):
                 if len(f.get('text', '')) > 10:
@@ -121,8 +116,6 @@ class GeminiDocumentParser:
                         page=f['page'], source_file=source_file,
                         fragment_type=f.get('fragment_type', 'texte')
                     ))
-            
-            # 2. Diagrammes (Restauré)
             rels = []
             for d in data.get("diagrams_extracted", []):
                 section = d.get("section", "Diagramme")
@@ -134,9 +127,7 @@ class GeminiDocumentParser:
                         source_file=source_file,
                         section=section
                     ))
-            
             return frags, rels
-            
         except (json.JSONDecodeError, Exception) as e:
             logger.warning(f"⚠️ Fallback JSON (Gemini) : {e}")
             return [RawFragment(

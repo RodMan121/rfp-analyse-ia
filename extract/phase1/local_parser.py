@@ -7,6 +7,10 @@ from loguru import logger
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.datamodel.base_models import InputFormat
+from dotenv import load_dotenv
+
+# Chargement configuration
+load_dotenv(pathlib.Path(__file__).parent.parent / ".env")
 
 @dataclass
 class LocalRawFragment:
@@ -20,13 +24,18 @@ class LocalRawFragment:
     category: str = "NON_CLASSE"
 
 class DoclingParser:
-    """
-    Parser avancé avec Cache intelligent et Chunking robuste.
-    """
+    """Parser avec Cache et chemins configurables via .env."""
 
-    def __init__(self, image_output_dir: str = "data/output_images", cache_dir: str = "data/output_json"):
+    def __init__(self, image_output_dir: str = None, cache_dir: str = None):
         logger.info("🤖 Initialisation du Parser Hiérarchique...")
         
+        # Chemins pilotés par .env
+        self.image_output_dir = pathlib.Path(image_output_dir or os.getenv("OUTPUT_IMAGE_DIR", "data/output_images"))
+        self.cache_dir = pathlib.Path(cache_dir or os.getenv("OUTPUT_JSON_DIR", "data/output_json"))
+        
+        self.image_output_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
         pipeline_options = PdfPipelineOptions()
         pipeline_options.generate_page_images = True
         pipeline_options.images_scale = 2.0
@@ -36,11 +45,6 @@ class DoclingParser:
             allowed_formats=[InputFormat.PDF],
             format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
         )
-        
-        self.image_output_dir = pathlib.Path(image_output_dir)
-        self.cache_dir = pathlib.Path(cache_dir)
-        self.image_output_dir.mkdir(parents=True, exist_ok=True)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         self.categories = {
             "ADMIN": ["administratif", "candidature", "justificatif", "éligibilité", "assurance"],
@@ -52,7 +56,7 @@ class DoclingParser:
         }
 
     def _get_semantic_category(self, text: str, breadcrumbs: str) -> str:
-        """Détermine la catégorie métier par score de mots-clés."""
+        """Détermine la catégorie métier."""
         context = (text + " " + breadcrumbs).lower()
         scores = {cat: 0 for cat in self.categories}
         for cat, keywords in self.categories.items():
@@ -62,10 +66,9 @@ class DoclingParser:
         return best_cat if scores[best_cat] > 0 else "GENERAL"
 
     def _safe_chunk(self, text: str, max_chars: int = 1500, overlap: int = 200) -> list[str]:
-        """Découpe les textes longs sans perte de données finale."""
+        """Découpe sans perte finale."""
         if len(text) <= max_chars: return [text]
-        chunks = []
-        start = 0
+        chunks, start = [], 0
         while start < len(text):
             end = min(start + max_chars, len(text))
             chunks.append(text[start:end])
@@ -74,39 +77,31 @@ class DoclingParser:
         return chunks
 
     def parse_to_fragments(self, filepath: str | pathlib.Path) -> list[LocalRawFragment]:
-        """Analyse avec validation de la fraîcheur du cache."""
+        """Analyse avec vérification de fraîcheur cache."""
         filepath = pathlib.Path(filepath)
         source_name = filepath.name
         fragment_cache = self.cache_dir / f"{filepath.stem}.fragments.json"
 
-        # Vérification fraîcheur cache (Date modification PDF vs Cache)
-        if fragment_cache.exists():
-            if fragment_cache.stat().st_mtime > filepath.stat().st_mtime:
-                logger.info(f"♻️ Chargement du cache valide : {fragment_cache.name}")
-                try:
-                    with open(fragment_cache, "r", encoding="utf-8") as f:
-                        cached_data = json.load(f)
-                    return [LocalRawFragment(**fr) for fr in cached_data]
-                except Exception as e:
-                    logger.warning(f"⚠️ Cache illisible, re-parsing... ({e})")
-            else:
-                logger.info("⚠️ PDF modifié, régénération du cache...")
+        if fragment_cache.exists() and fragment_cache.stat().st_mtime > filepath.stat().st_mtime:
+            logger.info(f"♻️ Chargement du cache valide : {fragment_cache.name}")
+            try:
+                with open(fragment_cache, "r", encoding="utf-8") as f:
+                    cached_data = json.load(f)
+                return [LocalRawFragment(**fr) for fr in cached_data]
+            except Exception as e:
+                logger.warning(f"⚠️ Cache illisible ({e})")
 
         logger.info(f"📄 Analyse complète : {filepath}")
         result = self.converter.convert(filepath)
         doc = result.document
-        
         fragments = self._extract_from_doc(doc, source_name)
         
-        # Sauvegarde cache
         try:
             import dataclasses
             with open(fragment_cache, "w", encoding="utf-8") as f:
                 json.dump([dataclasses.asdict(fr) for fr in fragments], f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"❌ Échec sauvegarde cache : {e}")
+        except Exception as e: logger.error(f"❌ Cache non sauvegardé : {e}")
 
-        # Images
         for page in result.pages:
             if page.image:
                 img_path = self.image_output_dir / f"{filepath.stem}_page_{page.page_no + 1}.png"
@@ -115,21 +110,16 @@ class DoclingParser:
         return fragments
 
     def _extract_from_doc(self, doc, source_name: str) -> list[LocalRawFragment]:
-        """Extraction structurelle unifiée."""
-        fragments = []
-        title_stack = []
+        fragments, title_stack = [], []
         for item, level in doc.iterate_items():
             label = item.label.lower()
             is_table = "table" in label
             try:
                 if is_table:
                     raw_text = f"\n[TABLEAU]\n{item.export_to_markdown()}\n[/TABLEAU]\n" if hasattr(item, "export_to_markdown") else item.text
-                else:
-                    raw_text = item.text if hasattr(item, "text") else ""
+                else: raw_text = item.text if hasattr(item, "text") else ""
                 if not raw_text or len(raw_text.strip()) < 5: continue
-            except Exception as e:
-                logger.debug(f"⚠️ Fragment sauté : {e}")
-                continue
+            except Exception as e: logger.debug(f"⚠️ Fragment sauté : {e}"); continue
 
             if "heading" in label or "title" in label or "header" in label:
                 depth = level if level is not None else 0

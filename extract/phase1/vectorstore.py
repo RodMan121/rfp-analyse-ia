@@ -53,7 +53,7 @@ class VectorStore:
                 "breadcrumbs": f.breadcrumbs, "page": f.page, "category": f.category
             })
 
-        self.collection.add(ids=ids, documents=documents, metadatas=metadatas)
+        self.collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
 
         # Mise à jour BM25
         new_docs = [{"text": d, "metadata": m} for d, m in zip(documents, metadatas)]

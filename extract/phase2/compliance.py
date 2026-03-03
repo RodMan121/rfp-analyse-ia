@@ -5,16 +5,22 @@ from pathlib import Path
 from loguru import logger
 from typing import List, Dict
 from concurrent.futures import ThreadPoolExecutor
+from dotenv import load_dotenv
 from phase1.vectorstore import VectorStore
 from phase1.reranker import LocalReranker
 
-# Centralisation via .env
+# Chargement configuration robuste
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(env_path)
+
 TEXT_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "qwen2.5:7b")
+DEFAULT_DB_PATH = os.getenv("CHROMA_DB_PATH", "data/chroma_db_hierarchical")
 
 class ComplianceAuditAgent:
     """Agent d'Audit avec Gap Analysis sécurisé."""
 
-    def __init__(self, db_path: str = "data/chroma_db_hierarchical"):
+    def __init__(self, db_path: str = None):
+        db_path = db_path or DEFAULT_DB_PATH
         self.rfp_store = VectorStore(db_path=db_path, collection_name="rfp_hierarchical")
         self.catalog_store = VectorStore(db_path=db_path, collection_name="service_catalog")
         self.reranker = LocalReranker()
@@ -41,8 +47,7 @@ class ComplianceAuditAgent:
         return all_requirements
 
     def _analyze_single_gap(self, req: Dict) -> Dict:
-        """Analyse d'une seule exigence sans mutation du dictionnaire d'entrée."""
-        # Correction audit : copie pour éviter race condition
+        """Analyse d'une seule exigence (copie pour parallélisme)."""
         result = {**req}
         know_how = self.catalog_store.search_hybrid(query=result['exigence'], n_results=3)
         context = "\n".join([k['text'] for k in know_how]) if know_how else "AUCUN SAVOIR-FAIRE TROUVÉ."
@@ -53,13 +58,12 @@ class ComplianceAuditAgent:
             gap = json.loads(response.get('response', '{}'))
             result.update(gap)
         except Exception as e:
-            logger.warning(f"⚠️ Échec Gap Analysis pour '{result['exigence'][:30]}' : {e}")
+            logger.warning(f"⚠️ Échec Gap Analysis : {e}")
             result.update({"statut": "ERREUR", "score_confiance": 0})
         return result
 
     def analyze_gap(self, requirements: List[Dict]) -> List[Dict]:
-        """Analyse parallélisée prudente."""
-        # Correction audit : Ollama est souvent séquentiel par défaut
+        """Analyse parallélisée."""
         workers = int(os.getenv("OLLAMA_NUM_PARALLEL", "1"))
         logger.info(f"🧠 Gap Analysis ({workers} workers) sur {len(requirements)} points...")
         with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -79,6 +83,7 @@ if __name__ == "__main__":
     audit = ComplianceAuditAgent()
     reqs = audit.extract_requirements(category="TECHNIQUE")
     results = audit.analyze_gap(reqs)
-    with open("data/gap_analysis_report.md", "w", encoding="utf-8") as f:
+    output_path = Path("data/gap_analysis_report.md")
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(audit.generate_report(results))
-    logger.success("✅ Audit terminé.")
+    logger.success(f"✅ Audit terminé : {output_path}")
