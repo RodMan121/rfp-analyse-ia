@@ -1,29 +1,94 @@
 # 🏗️ Architecture Technique : Augmented BID IA (V2)
 
-## 📊 Nouveau Flux de Précision (Phase 2)
-
-### 1. Moteur de Recherche Hybride (Double Indexation)
-Le système utilise désormais un couplage **Vecteurs + BM25**.
-- **Vecteurs (SentenceTransformers)** : Capte l'intention et le sens global (ex: 'cybersécurité' -> 'protection des données').
-- **BM25 (Textuel)** : Identifie les références exactes (ex: 'Article 4.2', 'ISO 27001').
-- **Fusion** : L'agent récupère les 20 meilleurs candidats des deux mondes avant le reranking.
-
-### 2. Tagging Sémantique (Classifier)
-Lors de l'ingestion, chaque fragment est étiqueté (`ADMIN`, `TECHNIQUE`, `FINANCIER`, etc.).
-- **Pourquoi ?** Cela permet à l'IA d'analyser les exigences par domaine métier et de filtrer le bruit.
-
-### 3. Matrice de Conformité & Gap Analysis (GTM)
-Le moteur d'audit (Phase 2) suit ce processus :
-1. **Extraction (RFP)** : Identification des obligations du client.
-2. **Retrieval (Catalogue)** : Recherche automatique dans votre référentiel de savoir-faire (`service_catalog`).
-3. **Inférence de Conformité** : L'IA compare l'exigence client et votre preuve de savoir-faire pour déterminer le statut (`CONFORME`, `PARTIEL`, `NON_CONFORME`).
-
-### 4. Agent Expert avec Mémoire
-L'agent RFP n'est plus sans mémoire. Il conserve les 6 derniers échanges pour permettre un dialogue fluide (ex: questions de suivi).
+Ce document explique le fonctionnement interne du moteur d'analyse. Il est conçu pour être lu par des développeurs ou des architectes solutions.
 
 ---
 
-## 🛠️ Stack Technique Mise à jour
-- **BM25 Engine** : `rank_bm25` (Algorithme de ranking textuel).
-- **Routage** : LLM-Based Routing (Qwen 2.5 décide si c'est de la vision ou du texte).
-- **Audit Engine** : JSON Extraction (Ollama Qwen 2.5).
+## 📊 1. Flux de Données Global (Pipeline)
+
+Voici comment un document PDF devient une réponse intelligente :
+
+```mermaid
+graph TD
+    A[📄 PDF Brut] --> B[⚙️ Docling Parser]
+    B --> C{🔍 Extraction}
+    C -->|Images| D[🖼️ Captures PNG]
+    C -->|Texte| E[📝 Fragments Markdown]
+    E --> F[🏷️ Tagging Sémantique]
+    F --> G[💾 Cache Fragments .json]
+    G --> H[🗄️ Indexation Double]
+    H --> I[🧠 ChromaDB - Vecteurs]
+    H --> J[🔎 BM25 - Mots-clés]
+```
+
+### Pourquoi ce flux ?
+1.  **Docling** ne se contente pas de lire le texte, il comprend la **hiérarchie** (Titres, Tableaux).
+2.  Le **Tagging Sémantique** classe automatiquement les données (ex: FINANCE, TECHNIQUE) pour que l'IA ne cherche pas une clause juridique dans la partie prix.
+3.  Le **Cache** permet de ne pas re-parser un document déjà analysé (gain de temps > 95%).
+
+---
+
+## 🧠 2. Recherche Hybride & Fusion RRF
+
+Pour garantir une précision maximale, nous utilisons deux moteurs de recherche en parallèle.
+
+### Le concept de la Fusion (RRF) :
+Si vous cherchez "Article 4.2 sur la sécurité", le moteur vectoriel comprend "sécurité" (sens), mais le moteur BM25 trouve "Article 4.2" (texte exact).
+
+```text
+REQUÊTE UTILISATEUR
+       |
+  ┌────┴────┐
+  ▼         ▼
+[VECTEURS] [BM25]  <-- Deux recherches indépendantes
+  |         |
+  ▼         ▼
+[TOP 20]   [TOP 20] <-- Deux listes de résultats
+  \         /
+   \       /
+    ▼     ▼
+ [FUSION RRF]      <-- Calcul d'un score combiné
+      |
+      ▼
+ [DÉCISION FINALE] <-- Les 5 meilleurs fragments
+```
+
+**La formule RRF (Reciprocal Rank Fusion)** : `Score = 1 / (60 + Rang_Vecteur) + 1 / (60 + Rang_BM25)`. 
+Cela favorise les documents qui apparaissent en haut des deux listes.
+
+---
+
+## 🖼️ 3. Routage Multimodal (Texte vs Vision)
+
+L'agent décide intelligemment quel "sens" utiliser pour répondre.
+
+```text
+QUESTION : "Explique le schéma page 5"
+       |
+       ▼
+[🧠 ROUTEUR LLM] 
+       |
+       ├─► [INTENTION TEXTE] ──► [Génération Qwen 2.5]
+       └─► [INTENTION VISION] ─┬► [Recherche Page PNG]
+                               └► [Analyse Llama 3.2 Vision]
+```
+
+---
+
+## 🛡️ 4. Gap Analysis (Analyse d'Écart)
+
+C'est le cerveau de la Phase 2. Il compare deux mondes :
+
+| Source A (Client) | Source B (Vous) | Résultat (IA) |
+|:---:|:---:|:---:|
+| **Exigence RFP** | **Votre Catalogue** | **Statut GTM** |
+| "Besoin Support 24/7" | "Support 8h-18h" | ⚠️ PARTIEL |
+| "Hébergement France" | "Data Center Paris" | ✅ CONFORME |
+
+---
+
+## 🛠️ Stack Technique
+- **LLM** : Ollama (Qwen 2.5 / Llama 3.2 Vision)
+- **Vector DB** : ChromaDB
+- **Keywords** : Rank-BM25
+- **Parsing** : IBM Docling
