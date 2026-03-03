@@ -53,7 +53,11 @@ MODE :"""
             return "VISION" if any(kw in question.lower() for kw in keywords) else "TEXT"
 
     def ask(self, question: str) -> str:
-        """Point d'entrée principal avec mémoire."""
+        """Point d'entrée principal avec mémoire résumée."""
+        # 1. Gestion de la mémoire (Résumé si trop long)
+        if len(self.history) > 8:
+            self._summarize_history()
+
         mode = self._route_request(question)
         
         if mode == "VISION":
@@ -61,12 +65,25 @@ MODE :"""
         else:
             answer = self._ask_text(question)
             
-        # Mise à jour de l'historique (mémoire courte)
         self.history.append({"role": "user", "content": question})
         self.history.append({"role": "assistant", "content": answer})
-        if len(self.history) > 6: self.history = self.history[-6:]
         
         return answer
+
+    def _summarize_history(self):
+        """Résume les échanges passés pour libérer du contexte."""
+        logger.info("🧠 Résumé de l'historique de conversation...")
+        history_text = "\n".join([f"{m['role']}: {m['content']}" for m in self.history[:-2]])
+        prompt = f"Résume cette conversation technique en 3 phrases clés pour conserver le contexte :\n\n{history_text}"
+        try:
+            response = ollama.generate(model=self.text_model, prompt=prompt)
+            self.history = [
+                {"role": "system", "content": f"Résumé des échanges précédents : {response['response']}"},
+                *self.history[-2:]
+            ]
+        except Exception as e:
+            logger.warning(f"⚠️ Échec du résumé : {e}")
+            self.history = self.history[-4:]
 
     def _ask_text(self, question: str) -> str:
         """Pipeline de raisonnement textuel avec recherche hybride et mémoire."""
@@ -147,8 +164,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     agent = RFPAgent()
-    answer = agent.ask(args.question)
     
-    # Affichage riche
-    title = "🖼️ ANALYSE VISUELLE" if agent._is_vision_request(args.question) else "📝 ANALYSE TEXTUELLE"
-    console.print(Panel(Markdown(answer), title=title, border_style="cyan", subtitle=f"Modèle: {agent.text_model if not agent._is_vision_request(args.question) else agent.vision_model}"))
+    # Correction du bug : Utilisation de la logique de routage existante pour déterminer le type
+    mode = agent._route_request(args.question)
+    title = "🖼️ ANALYSE VISUELLE" if mode == "VISION" else "📝 ANALYSE TEXTUELLE"
+    model_used = agent.vision_model if mode == "VISION" else agent.text_model
+    
+    try:
+        answer = agent.ask(args.question)
+        console.print(Panel(Markdown(answer), title=title, border_style="cyan", subtitle=f"Modèle: {model_used}"))
+    except Exception as e:
+        logger.error(f"Erreur lors du traitement de la requête : {e}")
+        console.print(f"[bold red]Une erreur critique est survenue :[/bold red] {e}")

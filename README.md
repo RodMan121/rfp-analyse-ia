@@ -1,60 +1,74 @@
 # 🏭 Augmented BID IA — Moteur de Conformité & Analyse RFP
 
-Analysez vos appels d'offres localement, avec une précision chirurgicale (GTM & Gap Analysis).
-
-## 🌟 Nouvelles Fonctionnalités (Phase 1 & 2)
-Ce logiciel est passé d'un simple assistant RAG à un **système expert d'audit** :
-
-- **🧠 Recherche Hybride (Vecteurs + BM25)** : Combine l'intelligence sémantique (sens) et la précision textuelle (mots-clés techniques, articles de loi).
-- **🛡️ Gap Analysis Automatisée** : Compare les exigences du client (RFP) avec votre **Catalogue de Services** pour détecter les écarts de conformité.
-- **🏷️ Tagging Sémantique** : Classification automatique des fragments (ADMIN, TECHNIQUE, JURIDIQUE, PLANNING, SÉCURITÉ).
-- **📊 Parsing Tabulaire Haute-Fidélité** : Extraction des tableaux complexes en Markdown pour une analyse précise des prix et délais.
-- **🤖 Agent Expert avec Mémoire** : Se souvient des échanges précédents pour des questions de suivi fluides.
+Un système d'analyse d'Appels d'Offres (RFP) 100% local, multimodal et orienté "Gap Analysis". Ce projet transforme un document brut en une matrice d'exigences vérifiée par rapport à votre savoir-faire.
 
 ---
 
-## 🚀 Flux de Traitement (Pipeline)
-1. **Ingestion (Docling)** : Parsing structurel + Capture PNG des schémas + Cache JSON.
-2. **Double Indexation** : Stockage dans ChromaDB (Vecteurs) + BM25 (Textuel).
-3. **Audit de Conformité** : Extraction des exigences et priorisation (HAUTE/MOYENNE).
-4. **Gap Analysis** : Confrontation avec votre catalogue de savoir-faire.
-5. **Rapport GTM** : Génération d'un tableau de synthèse Markdown (`data/gap_analysis_report.md`).
+## 🌟 Architecture & Fonctionnalités (Phase 1 & 2)
+Ce logiciel ne se contente pas de faire du "RAG", c'est un véritable **système expert d'audit** :
+
+### 1. Ingestion Robuste & Sémantique
+- **Parsing Hiérarchique (Docling)** : Comprend la structure du document (Titres, Sous-titres).
+- **Extraction Tabulaire** : Convertit les bordereaux de prix en Markdown strict.
+- **Tagging Automatique** : Chaque texte est classé (ADMIN, TECHNIQUE, JURIDIQUE).
+- **Cache JSON** : Les documents sont mis en cache pour un rechargement instantané.
+
+### 2. Le Moteur Hybride (Précision)
+- **Vecteurs (ChromaDB)** : Recherche par le sens (ex: "Cybersécurité").
+- **Mots-clés (BM25)** : Recherche par mots exacts (ex: "Article 4.2", "ISO 27001").
+- **Fusion RRF** : Les algorithmes combinent le meilleur des deux mondes.
+
+### 3. Les 3 Agents Métier
+- 🤖 **Agent QA (Avec Mémoire)** : Posez-lui des questions en direct, il se souvient des 6 derniers échanges et décide seul s'il doit "lire" ou "regarder" une page (Llama 3.2 Vision).
+- 🛡️ **Agent de Conformité (Gap Analysis)** : Croise les exigences du client avec votre catalogue de services pour générer une Matrice de Conformité (GTM).
+- 📋 **Auditeur de Confiance** : Un script qui note la qualité de l'ingestion de l'IA (Fiable, Douteux, Illisible) et vous remonte les questions bloquantes.
 
 ---
 
-## 🛠️ Installation & Utilisation
-### Prérequis
-- Python 3.10+, Ollama.
-- Modèles : `qwen2.5:7b` (Texte & Raisonnement), `llama3.2-vision` (Schémas).
+## 🛠️ Guide d'Utilisation (Tutoriel)
 
-### 1. Indexation
-Indexer l'Appel d'Offres :
+### Étape 0 : Prérequis
+- Python 3.10+
+- [Ollama](https://ollama.com/) avec les modèles : `qwen2.5:7b` et `llama3.2-vision`.
+
+### Étape 1 : Indexation des documents
+Apprenez à l'IA ce qu'elle doit analyser (le RFP) et ce que vous savez faire (votre catalogue).
+
 ```bash
-./venv/bin/python extract/main.py --input data/input/rfp.pdf --collection rfp_hierarchical
-```
-Indexer votre Catalogue de Services (Référentiel) :
-```bash
-./venv/bin/python extract/main.py --input data/input/catalogue.pdf --collection service_catalog
+# 1. Indexer l'Appel d'Offres du client
+./venv/bin/python extract/main.py --input data/input/mon_rfp.pdf --collection rfp_hierarchical
+
+# 2. Indexer votre référentiel technique (Catalogue, Ancienne offre)
+./venv/bin/python extract/main.py --input data/input/mon_catalogue.pdf --collection service_catalog
 ```
 
-### 2. Audit & Gap Analysis (Nouveau !)
-Générer la matrice de conformité et l'analyse d'écart :
+### Étape 2 : Rapport de Confiance & Qualité
+Vérifiez ce que l'IA a compris *avant* de lui faire confiance aveuglément.
+```bash
+./venv/bin/python extract/confidence_report.py --rfp "mon_rfp.pdf"
+```
+➡️ Consultez `data/confidence_report.md` pour voir si des schémas étaient illisibles.
+
+### Étape 3 : Audit & Gap Analysis (GTM)
+Générez automatiquement la matrice des exigences et l'analyse de vos écarts (ce que vous pouvez faire vs ce que le client demande).
 ```bash
 ./venv/bin/python extract/phase2/compliance.py
 ```
+➡️ Consultez `data/gap_analysis_report.md` (Tableau Markdown ✅/⚠️/❌).
 
-### 3. Agent Expert (Q&A)
-Interroger le document (Texte ou Vision) :
+### Étape 4 : L'Agent Expert (Questions Libres)
+Besoin d'un point de détail ? Interrogez l'agent directement :
 ```bash
-./venv/bin/python extract/rfp_agent.py "Quelles sont les clauses de pénalités de retard ?"
+./venv/bin/python extract/rfp_agent.py "Détaille les pénalités de retard"
+# Ou pour une image :
+./venv/bin/python extract/rfp_agent.py "Explique le schéma de l'architecture serveur"
 ```
 
 ---
 
-## 📂 Structure du Projet
-- `extract/phase1/` : Moteur d'ingestion (Parser, VectorStore, Reranker).
-- `extract/phase2/` : Intelligence d'audit (Compliance, Gap Analysis).
-- `data/` : Stockage local (Bases vectorielles, Images, Rapports).
-- `ARCHITECTURE.md` : Détails profonds du fonctionnement hybride.
+## 📂 Structure du Code
+- `extract/phase1/` : Le moteur bas niveau (Parser, Chunking, VectorStore RRF).
+- `extract/phase2/` : L'intelligence métier (Compliance, Gap Analysis).
+- `data/` : Espace de stockage (Ignoré par Git pour votre confidentialité).
 
-🔒 **Sécurité** : 100% Local. Aucune donnée n'est envoyée dans le cloud.
+🔒 **Confidentialité** : Ce système tourne **100% en local**. Rien n'est envoyé sur internet.

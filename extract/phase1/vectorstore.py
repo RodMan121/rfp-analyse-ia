@@ -30,11 +30,16 @@ class VectorStore:
         self.bm25 = None
         self.bm25_docs = []
         if self.bm25_path.exists():
-            with open(self.bm25_path, "rb") as f:
-                data = pickle.load(f)
-                self.bm25 = data["index"]
-                self.bm25_docs = data["docs"]
-                logger.info(f"🔎 Index BM25 '{collection_name}' chargé.")
+            try:
+                with open(self.bm25_path, "rb") as f:
+                    data = pickle.load(f)
+                    self.bm25 = data["index"]
+                    self.bm25_docs = data["docs"]
+                    logger.info(f"🔎 Index BM25 '{collection_name}' chargé.")
+            except Exception as e:
+                logger.warning(f"⚠️ Index BM25 corrompu ou illisible ({e}). Un nouvel index sera recréé.")
+                self.bm25 = None
+                self.bm25_docs = []
 
     def add_fragments_batch(self, fragments: List[Any]) -> int:
         """Ajoute massivement des fragments aux deux moteurs avec Tagging Sémantique."""
@@ -73,12 +78,11 @@ class VectorStore:
 
     def search_hybrid(self, query: str, n_results: int = 20) -> List[dict]:
         """
-        Recherche hybride fusionnant Vecteurs et Mots-clés.
+        Recherche hybride fusionnant Vecteurs et Mots-clés via RRF (Reciprocal Rank Fusion).
         """
-        # A. Recherche Vectorielle (20 candidats)
+        # 1. Récupération des deux sources
         vec_results = self.search(query, n_results=n_results)
         
-        # B. Recherche BM25 (20 candidats)
         bm25_results = []
         if self.bm25:
             tokenized_query = query.lower().split()
@@ -89,20 +93,26 @@ class VectorStore:
                 if bm25_scores[idx] > 0:
                     bm25_results.append(self.bm25_docs[idx])
 
-        # C. Fusion simple (Priority to BM25 if very high score, else Vector)
-        # On combine et dédoublonne sur le texte
-        seen_texts = set()
-        final_results = []
-        
-        # On alterne pour favoriser la diversité
-        for v, b in zip(vec_results + [None]*max(0, len(bm25_results)-len(vec_results)), 
-                        bm25_results + [None]*max(0, len(vec_results)-len(bm25_results))):
-            if v and v["text"] not in seen_texts:
-                final_results.append(v)
-                seen_texts.add(v["text"])
-            if b and b["text"] not in seen_texts:
-                final_results.append(b)
-                seen_texts.add(b["text"])
+        # 2. Algorithme RRF (Reciprocal Rank Fusion)
+        k = 60
+        rrf_scores = {} # text -> score
+        all_docs = {}   # text -> doc_object
+
+        # Pondération Vecteurs
+        for rank, doc in enumerate(vec_results):
+            txt = doc["text"]
+            all_docs[txt] = doc
+            rrf_scores[txt] = rrf_scores.get(txt, 0) + 1.0 / (k + rank + 1)
+
+        # Pondération BM25
+        for rank, doc in enumerate(bm25_results):
+            txt = doc["text"]
+            all_docs[txt] = doc
+            rrf_scores[txt] = rrf_scores.get(txt, 0) + 1.0 / (k + rank + 1)
+
+        # 3. Tri et retour
+        sorted_texts = sorted(rrf_scores.keys(), key=lambda t: rrf_scores[t], reverse=True)
+        final_results = [all_docs[t] for t in sorted_texts]
                 
         return final_results[:n_results]
 

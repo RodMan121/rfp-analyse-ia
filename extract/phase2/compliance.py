@@ -22,7 +22,7 @@ class ComplianceAuditAgent:
         logger.info(f"🛡️ Agent d'Audit & Gap Analysis initialisé (Modèle : {self.model})")
 
     def extract_requirements(self, category: str = "GENERAL") -> List[Dict]:
-        """Extraie les exigences depuis le RFP."""
+        """Extraie les exigences depuis le RFP avec gestion d'erreurs robuste."""
         logger.info(f"🔎 Audit de la catégorie : {category}...")
         fragments = self.rfp_store.search_hybrid(query=f"CATÉGORIE: {category}", n_results=15)
         
@@ -33,7 +33,8 @@ class ComplianceAuditAgent:
             text = frag['text']
             source = f"{frag['metadata']['breadcrumbs']} (Page {frag['metadata']['page']})"
             
-            prompt = f"FRAGMENT :\n{text}\n\nExtraie les exigences précises. Réponds UNIQUEMENT en JSON :\n" \
+            prompt = f"FRAGMENT :\n{text}\n\nExtraie les exigences techniques ou contractuelles unitaires.\n" \
+                     "Réponds UNIQUEMENT en JSON sous ce format :\n" \
                      "[{\"exigence\": \"...\", \"priorite\": \"HAUTE/MOYENNE/BASSE\"}]"
 
             try:
@@ -42,54 +43,59 @@ class ComplianceAuditAgent:
                 for r in reqs:
                     r['source'] = source
                     all_requirements.append(r)
-            except: continue
+            except json.JSONDecodeError as je:
+                logger.warning(f"⚠️ JSON Invalide pour {source} : {je}")
+                logger.debug(f"Réponse brute : {response['response'][:200]}...")
+                continue
+            except Exception as e:
+                logger.error(f"❌ Erreur extraction fragment : {e}")
+                continue
 
         return all_requirements
 
     def analyze_gap(self, requirements: List[Dict]) -> List[Dict]:
-        """Compare chaque exigence avec le catalogue de services (Gap Analysis)."""
+        """Compare avec catalogue et ajoute un score de confiance."""
         logger.info(f"🧠 Analyse d'écart (Gap Analysis) sur {len(requirements)} points...")
         results = []
 
         for req in requirements:
-            # 1. Chercher des preuves de savoir-faire dans le catalogue
             know_how = self.catalog_store.search_hybrid(query=req['exigence'], n_results=3)
             context_catalog = "\n".join([k['text'] for k in know_how]) if know_how else "AUCUN SAVOIR-FAIRE TROUVÉ."
 
-            # 2. IA Compare l'exigence avec le savoir-faire
             prompt = f"""EXIGENCE CLIENT : {req['exigence']}
             NOTRE SAVOIR-FAIRE : {context_catalog}
             
             Détermine la conformité. Réponds UNIQUEMENT en JSON :
             {{
               "statut": "CONFORME / PARTIEL / NON_CONFORME",
-              "justification": "Explique pourquoi par rapport à notre savoir-faire.",
-              "preuve": "Cite l'élément du catalogue (si trouvé)."
+              "justification": "Explique pourquoi.",
+              "score_confiance": 0-100
             }}"""
 
             try:
                 response = ollama.generate(model=self.model, prompt=prompt, format="json")
                 gap = json.loads(response['response'])
-                # Fusion des données
                 req.update(gap)
                 results.append(req)
-            except: 
-                req.update({"statut": "NON_CLASSE", "justification": "Erreur d'analyse."})
+            except Exception as e:
+                logger.warning(f"⚠️ Échec Gap Analysis pour '{req['exigence'][:50]}' : {e}")
+                req.update({"statut": "ERREUR", "justification": "Erreur d'analyse IA.", "score_confiance": 0})
                 results.append(req)
 
         return results
 
     def generate_report(self, analysis: List[Dict]) -> str:
-        """Génère le rapport final GTM + Gap Analysis."""
+        """Génère le rapport avec score de confiance."""
         report = "# 📋 Matrice de Conformité & Gap Analysis (GTM)\n\n"
-        report += "| Statut | Priorité | Exigence | Source | Justification |\n"
-        report += "|--------|----------|----------|--------|---------------|\n"
+        report += "| Statut | Confiance | Priorité | Exigence | Source | Justification |\n"
+        report += "|--------|-----------|----------|----------|--------|---------------|\n"
         
         for r in analysis:
             status_emoji = "✅" if r['statut'] == "CONFORME" else "⚠️" if r['statut'] == "PARTIEL" else "❌"
+            conf = f"{r.get('score_confiance', 0)}%"
             prio_emoji = "🔴" if r['priorite'] == "HAUTE" else "🟡"
             
-            report += f"| {status_emoji} | {prio_emoji} | {r['exigence']} | {r['source']} | {r['justification']} |\n"
+            report += f"| {status_emoji} | {conf} | {prio_emoji} | {r['exigence']} | {r['source']} | {r['justification']} |\n"
             
         return report
 

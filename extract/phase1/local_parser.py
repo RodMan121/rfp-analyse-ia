@@ -1,6 +1,7 @@
 import os
 import pathlib
 import re
+import json
 from dataclasses import dataclass
 from loguru import logger
 from docling.document_converter import DocumentConverter, PdfFormatOption
@@ -16,17 +17,16 @@ class LocalRawFragment:
     page: int = 0
     fragment_type: str = "texte"
     source_file: str = ""
-    category: str = "NON_CLASSE" # Nouvelle étiquette métier
+    category: str = "NON_CLASSE"
 
 class DoclingParser:
     """
-    Parser avancé avec capture PNG et Tagging Sémantique.
+    Parser avancé avec Cache JSON, Chunking adaptatif et Tagging Sémantique.
     """
 
     def __init__(self, image_output_dir: str = "data/output_images", cache_dir: str = "data/output_json"):
         logger.info("🤖 Initialisation du Parser Hiérarchique avec Vision...")
         
-        # Configuration Docling
         pipeline_options = PdfPipelineOptions()
         pipeline_options.generate_page_images = True
         pipeline_options.images_scale = 2.0
@@ -52,30 +52,65 @@ class DoclingParser:
         }
 
     def _get_semantic_category(self, text: str, breadcrumbs: str) -> str:
-        """Détermine la catégorie métier du fragment."""
+        """Détermine la catégorie métier du fragment par score de mots-clés."""
         context = (text + " " + breadcrumbs).lower()
+        scores = {cat: 0 for cat in self.categories}
         for cat, keywords in self.categories.items():
-            if any(kw in context for kw in keywords):
-                return cat
-        return "GENERAL"
+            for kw in keywords:
+                if kw in context:
+                    scores[cat] += 1
+        
+        best_cat = max(scores, key=scores.get)
+        return best_cat if scores[best_cat] > 0 else "GENERAL"
+
+    def _safe_chunk(self, text: str, max_chars: int = 1500, overlap: int = 200) -> list[str]:
+        """Découpe les longs textes pour éviter de saturer les embeddings."""
+        if len(text) <= max_chars:
+            return [text]
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = start + max_chars
+            chunks.append(text[start:end])
+            start = end - overlap
+            if start >= len(text) - overlap: break
+        return chunks
 
     def parse_to_fragments(self, filepath: str | pathlib.Path) -> list[LocalRawFragment]:
-        """Analyse structurelle avec système de cache JSON."""
+        """Analyse structurelle avec cache de fragments persistant."""
         filepath = pathlib.Path(filepath)
         source_name = filepath.name
-        cache_file = self.cache_dir / f"{filepath.stem}.json"
+        # On utilise un cache spécifique pour les fragments finaux
+        fragment_cache = self.cache_dir / f"{filepath.stem}.fragments.json"
 
-        if cache_file.exists():
-            logger.info(f"♻️ Chargement du document depuis le cache : {cache_file.name}")
-        
-        logger.info(f"📄 Analyse de : {filepath}")
+        # 1. Chargement direct des fragments si le cache existe
+        if fragment_cache.exists():
+            logger.info(f"♻️ Chargement des fragments depuis le cache : {fragment_cache.name}")
+            try:
+                with open(fragment_cache, "r", encoding="utf-8") as f:
+                    cached_data = json.load(f)
+                return [LocalRawFragment(**fr) for fr in cached_data]
+            except Exception as e:
+                logger.warning(f"⚠️ Cache fragments corrompu : {e}")
+
+        # 2. Sinon, parsing complet via Docling
+        logger.info(f"📄 Analyse complète de : {filepath}...")
         result = self.converter.convert(filepath)
         doc = result.document
         
-        with open(cache_file, "w", encoding="utf-8") as f:
-            import json
-            json.dump(doc.export_to_dict(), f, ensure_ascii=False, indent=2)
+        # Extraction et Tagging (Logique unifiée)
+        fragments = self._extract_from_doc(doc, source_name)
         
+        # 3. Sauvegarde dans le cache pour la prochaine fois
+        try:
+            import dataclasses
+            with open(fragment_cache, "w", encoding="utf-8") as f:
+                json.dump([dataclasses.asdict(fr) for fr in fragments], f, ensure_ascii=False, indent=2)
+            logger.success(f"💾 {len(fragments)} fragments mis en cache.")
+        except Exception as e:
+            logger.error(f"❌ Impossible de sauvegarder le cache : {e}")
+
+        # Images pages (Vision)
         doc_stem = filepath.stem
         for page in result.pages:
             if page.image:
@@ -83,62 +118,54 @@ class DoclingParser:
                 if not image_path.exists():
                     page.image.save(image_path)
         
-        logger.success(f"📸 {len(result.pages)} pages traitées (JSON + PNG).")
+        return fragments
 
+    def _extract_from_doc(self, doc, source_name: str) -> list[LocalRawFragment]:
+        """Logique d'extraction, chunking et tagging."""
         fragments = []
-        title_stack = [] 
+        title_stack = []
 
         for item, level in doc.iterate_items():
             label = item.label.lower()
-            item_text = ""
             is_table = "table" in label
-
+            
             try:
-                # Logique d'extraction spécialisée
                 if is_table:
-                    # Export Markdown pour conserver la structure colonnes/lignes
+                    # Markdown export for tables
                     if hasattr(item, "export_to_markdown"):
-                        item_text = f"\n[DÉBUT TABLEAU]\n{item.export_to_markdown()}\n[FIN TABLEAU]\n"
+                        raw_text = f"\n[DÉBUT TABLEAU]\n{item.export_to_markdown()}\n[FIN TABLEAU]\n"
+                    else:
+                        raw_text = item.text if hasattr(item, "text") else ""
                 else:
-                    item_text = item.text if hasattr(item, "text") else ""
+                    raw_text = item.text if hasattr(item, "text") else ""
                 
-                if not item_text:
-                    if hasattr(item, "export_to_markdown"):
-                        item_text = item.export_to_markdown()
-                
-                item_text = item_text.strip()
-                if not item_text: continue
+                if not raw_text or len(raw_text.strip()) < 5: continue
             except Exception as e:
-                logger.debug(f"⚠️ Erreur fragment : {e}")
+                logger.debug(f"⚠️ Ignoré (Erreur d'extraction fragment) : {e}")
                 continue
-
-            # Nettoyage et filtrage du bruit
-            if not is_table and len(item_text) < 40: continue
-            if is_table and len(item_text) < 20: continue # Un petit tableau peut être important
 
             if "heading" in label or "title" in label or "header" in label:
                 depth = level if level is not None else 0
                 title_stack = title_stack[:depth]
-                title_stack.append(item_text)
+                title_stack.append(raw_text)
                 continue
+
+            if not is_table and len(raw_text) < 40: continue
 
             breadcrumbs = " > ".join(title_stack) if title_stack else "Racine"
             current_section = title_stack[-1] if title_stack else "Général"
-            
-            page_no = 0
-            if item.prov and len(item.prov) > 0:
-                page_no = item.prov[0].page_no + 1
+            page_no = item.prov[0].page_no + 1 if item.prov else 1
+            category = self._get_semantic_category(raw_text, breadcrumbs)
 
-            category = self._get_semantic_category(item_text, breadcrumbs)
-
-            fragments.append(LocalRawFragment(
-                text=item_text,
-                section=current_section,
-                breadcrumbs=breadcrumbs,
-                page=page_no,
-                source_file=source_name,
-                fragment_type="table" if is_table else "text",
-                category=category
-            ))
-
+            # Chunking Adaptatif (Vérifie la taille avant d'indexer)
+            for chunk in self._safe_chunk(raw_text):
+                fragments.append(LocalRawFragment(
+                    text=chunk,
+                    section=current_section,
+                    breadcrumbs=breadcrumbs,
+                    page=page_no,
+                    source_file=source_name,
+                    fragment_type="table" if is_table else "text",
+                    category=category
+                ))
         return fragments
