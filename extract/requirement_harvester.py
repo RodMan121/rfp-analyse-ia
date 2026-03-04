@@ -27,7 +27,7 @@ MAX_CONCURRENT_REQUESTS = 20 if (OR_KEY and len(OR_KEY) > 10) else FSM_CONCURREN
 class RequirementHarvester:
     def __init__(self, db_path: str = "data/chroma_db_hierarchical"):
         self.store = VectorStore(db_path=db_path)
-        # Charge le contexte documentaire (généré lors de l'ingestion main.py)
+        # Lit data/document_context.md et adapte le pipeline au document
         doc_context = DocumentContext.load_or_generic()
         self.pipeline = FSMPipeline(doc_context=doc_context)
 

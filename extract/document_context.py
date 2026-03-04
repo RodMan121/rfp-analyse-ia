@@ -4,66 +4,59 @@ document_context.py — Contexte documentaire générique
 Permet de décrire n'importe quel type de document en entrée
 afin que tous les agents du pipeline s'y adaptent dynamiquement.
 
-Usage :
-    ctx = DocumentContext.from_description(
-        "RFP pour une application métier. Contient des exigences normées "
-        "BN-XXX, des schémas et des maquettes fils de fer."
-    )
-    ctx.save()   # → data/document_context.json
+L'utilisateur écrit un fichier texte libre : data/document_context.md
+Le pipeline le lit directement — pas de JSON, pas d'étape intermédiaire.
 
-    ctx = DocumentContext.load()  # chargé par les agents
+Usage :
+    # Générer le template vide
+    python main.py --init-context
+
+    # Compléter data/document_context.md en texte libre, puis lancer
+    python main.py --input mon_doc.pdf
 """
 
-import json
 import re
-import os
-import asyncio
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 from loguru import logger
 
-# Chemin de persistance du contexte
-CONTEXT_PATH = Path("data/document_context.json")
+# Fichier texte libre écrit par l'utilisateur — seule source de vérité
+CONTEXT_MD_PATH = Path("data/document_context.md")
 
 
 @dataclass
 class DocumentContext:
     """
-    Représente le contexte sémantique d'un document analysé.
-    Toutes les valeurs sont auto-déduites de la description utilisateur,
-    éventuellement enrichies par LLM.
+    Contexte sémantique d'un document analysé.
+    Toutes les valeurs sont auto-déduites du fichier document_context.md.
     """
 
-    # Texte libre fourni par l'utilisateur
+    # Texte brut lu dans le .md
     raw_description: str = ""
 
-    # Type de document détecté
-    # Valeurs : RFP | CCTP | SPEC | CONTRACT | TECHNICAL_NOTE | UNKNOWN
+    # Type de document : RFP | CCTP | SPEC | CONTRACT | TECHNICAL_NOTE | UNKNOWN
     document_type: str = "UNKNOWN"
 
-    # Domaine fonctionnel : IT | INFRASTRUCTURE | MÉTIER | JURIDIQUE | UNKNOWN
+    # Domaine : IT | INFRASTRUCTURE | METIER | JURIDIQUE | UNKNOWN
     domain: str = "UNKNOWN"
 
-    # Langue principale : fr | en | mixed
+    # Langue : fr | en | mixed
     language: str = "fr"
 
-    # Modèle regex des identifiants d'exigences (ex: r"BN-\d{3}" ou r"REQ-\d+")
-    # Si vide, aucun ancrage sur identifiant officiel
+    # Regex des identifiants d'exigences (ex: r"BN-\d{3}" ou r"REQ-\d+")
     requirement_id_pattern: str = ""
 
     # Exemple d'identifiant pour les prompts (ex: "BN-039", "REQ-001")
     requirement_id_example: str = ""
 
-    # Types de contenu présents dans le document
-    # ex: ["exigences normées", "schémas", "maquettes fils de fer", "tableaux"]
+    # Types de contenu détectés (ex: ["exigences normées", "schémas", "maquettes"])
     content_types: List[str] = field(default_factory=list)
 
     # Patterns de bruit supplémentaires spécifiques à ce document
-    # (en plus des patterns génériques)
     extra_noise_patterns: List[str] = field(default_factory=list)
 
-    # Contexte court pour les prompts LLM (généré automatiquement)
+    # Hint court injecté dans les prompts LLM (généré automatiquement)
     llm_context_hint: str = ""
 
     # ------------------------------------------------------------------ #
@@ -71,104 +64,96 @@ class DocumentContext:
     # ------------------------------------------------------------------ #
 
     @classmethod
-    def from_description(cls, description: str) -> "DocumentContext":
+    def from_file(cls, path: str = None) -> "DocumentContext":
         """
-        Construit un DocumentContext à partir d'une description libre.
-        La détection est faite par règles (rapide, sans LLM).
-        Pour une détection enrichie via LLM, utiliser `from_description_async`.
+        Construit un DocumentContext depuis un fichier texte libre.
+        Si path est None, utilise data/document_context.md par défaut.
         """
+        target = Path(path) if path else CONTEXT_MD_PATH
+        if not target.exists():
+            logger.warning(f"⚠️ Fichier contexte introuvable : {target} — extraction générique.")
+            return cls._generic()
+        with open(target, "r", encoding="utf-8") as f:
+            description = f.read().strip()
+        if not description:
+            logger.warning("⚠️ Fichier contexte vide — extraction générique.")
+            return cls._generic()
+        logger.info(f"📄 Contexte lu depuis : {target.name} ({len(description)} chars)")
         ctx = cls(raw_description=description)
         ctx._detect_from_text(description)
         ctx._build_llm_hint()
-        logger.info(f"📄 Contexte détecté : type={ctx.document_type} | domaine={ctx.domain} | pattern={ctx.requirement_id_pattern or 'aucun'}")
-        return ctx
-
-    @classmethod
-    async def from_description_async(cls, description: str, llm_caller=None) -> "DocumentContext":
-        """
-        Construit un DocumentContext enrichi par LLM.
-        `llm_caller` est une coroutine async(prompt: str) -> str.
-        Si None, fallback sur la détection par règles.
-        """
-        ctx = cls.from_description(description)
-        if llm_caller is None:
-            return ctx
-
-        prompt = f"""Tu es un expert en analyse documentaire.
-Un utilisateur décrit son document ainsi :
-"{description}"
-
-Analyse et retourne UNIQUEMENT ce JSON (sans markdown) :
-{{
-  "document_type": "RFP|CCTP|SPEC|CONTRACT|TECHNICAL_NOTE|UNKNOWN",
-  "domain": "IT|INFRASTRUCTURE|METIER|JURIDIQUE|UNKNOWN",
-  "language": "fr|en|mixed",
-  "requirement_id_pattern": "regex Python pour les identifiants d'exigences, ex: BN-\\\\d{{3}} ou REQ-\\\\d+ ou vide si aucun",
-  "requirement_id_example": "ex: BN-039 ou REQ-001 ou vide",
-  "content_types": ["liste", "des types", "de contenu"],
-  "extra_noise_patterns": ["patterns regex de bruit spécifiques à ce type de document"],
-  "summary_for_llm": "phrase courte décrivant le document pour guider l'extraction"
-}}"""
-
-        try:
-            raw = await llm_caller(prompt)
-            clean = raw.strip().replace("```json", "").replace("```", "").strip()
-            data = json.loads(clean)
-            ctx.document_type = data.get("document_type", ctx.document_type)
-            ctx.domain = data.get("domain", ctx.domain)
-            ctx.language = data.get("language", ctx.language)
-            if data.get("requirement_id_pattern"):
-                ctx.requirement_id_pattern = data["requirement_id_pattern"]
-            if data.get("requirement_id_example"):
-                ctx.requirement_id_example = data["requirement_id_example"]
-            if data.get("content_types"):
-                ctx.content_types = data["content_types"]
-            if data.get("extra_noise_patterns"):
-                ctx.extra_noise_patterns = data["extra_noise_patterns"]
-            if data.get("summary_for_llm"):
-                ctx.llm_context_hint = data["summary_for_llm"]
-            ctx._build_llm_hint()
-            logger.success(f"✅ Contexte LLM enrichi : {ctx.document_type} / {ctx.domain}")
-        except Exception as e:
-            logger.warning(f"⚠️ Enrichissement LLM échoué ({e}), contexte par règles conservé.")
-
-        return ctx
-
-    @classmethod
-    def load(cls) -> Optional["DocumentContext"]:
-        """Charge le contexte depuis data/document_context.json."""
-        if not CONTEXT_PATH.exists():
-            logger.warning("⚠️ Aucun contexte documentaire trouvé. Extraction générique sans guidage.")
-            return None
-        with open(CONTEXT_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        ctx = cls(**data)
-        logger.info(f"📂 Contexte chargé : {ctx.document_type} | {ctx.domain} | pattern={ctx.requirement_id_pattern or 'aucun'}")
         return ctx
 
     @classmethod
     def load_or_generic(cls) -> "DocumentContext":
-        """Charge le contexte ou retourne un contexte générique neutre."""
-        ctx = cls.load()
-        return ctx if ctx is not None else cls._generic()
+        """
+        Lit data/document_context.md s'il existe,
+        sinon retourne un contexte générique neutre.
+        """
+        if CONTEXT_MD_PATH.exists():
+            return cls.from_file()
+        logger.warning("⚠️ Aucun fichier data/document_context.md — extraction générique.")
+        return cls._generic()
 
     @classmethod
     def _generic(cls) -> "DocumentContext":
-        ctx = cls(
+        return cls(
             raw_description="Document générique sans contexte spécifié.",
             document_type="UNKNOWN",
             domain="UNKNOWN",
             language="fr",
             llm_context_hint="Document dont le type est inconnu. Extraire toute obligation fonctionnelle."
         )
-        return ctx
 
-    def save(self):
-        """Persiste le contexte dans data/document_context.json."""
-        CONTEXT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(CONTEXT_PATH, "w", encoding="utf-8") as f:
-            json.dump(asdict(self), f, indent=2, ensure_ascii=False)
-        logger.info(f"💾 Contexte sauvegardé : {CONTEXT_PATH}")
+    @classmethod
+    def create_template(cls, path: str = None):
+        """
+        Génère un fichier data/document_context.md vide à compléter.
+        """
+        target = Path(path) if path else CONTEXT_MD_PATH
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            logger.warning(f"⚠️ Fichier déjà existant : {target} — non écrasé.")
+            return
+        template = """\
+# Contexte du document à analyser
+
+## Nature du document
+<!-- Ex: RFP, Cahier des charges, Spécification technique, Contrat SLA... -->
+
+
+## Organisation concernée
+<!-- Ex: L'ESSP (European Satellite Services Provider), ANSP certifié EASA -->
+
+
+## Sujet principal
+<!-- Décrivez en quelques phrases ce que le document couvre -->
+
+
+## Identifiants d'exigences
+<!-- Format utilisé dans le document pour numéroter les exigences -->
+<!-- Ex: BN-XXX (ex: BN-039), REQ-XXX, ou "aucun identifiant normalisé" -->
+
+
+## Types de contenu présents
+<!-- Listez ce que contient le document -->
+<!-- Ex: exigences normées, schémas, maquettes fils de fer, tableaux, workflows -->
+
+
+## Fonctionnalités clés décrites
+<!-- Listez les grandes fonctionnalités ou modules décrits dans le document -->
+
+
+## Contraintes techniques
+<!-- Ex: hébergement on-premise Ubuntu, Active Directory, politique mots de passe -->
+
+
+## Notes complémentaires
+<!-- Tout autre élément utile pour guider l'extraction des exigences -->
+"""
+        with open(target, "w", encoding="utf-8") as f:
+            f.write(template)
+        logger.success(f"✅ Template créé : {target}")
 
     # ------------------------------------------------------------------ #
     #  Helpers pour les agents                                             #
@@ -196,10 +181,7 @@ Analyse et retourne UNIQUEMENT ce JSON (sans markdown) :
             return None
 
     def build_babok_prompt_context(self) -> str:
-        """
-        Construit le bloc de contexte à injecter dans le prompt BABOK.
-        Adapté dynamiquement au type de document.
-        """
+        """Bloc de contexte injecté dans le prompt BABOK, adapté au type de document."""
         parts = []
 
         if self.llm_context_hint:
@@ -235,9 +217,7 @@ Analyse et retourne UNIQUEMENT ce JSON (sans markdown) :
         return "\n".join(parts) if parts else ""
 
     def build_is_requirement_hint(self) -> str:
-        """
-        Hint pour le champ is_real_requirement dans le prompt BABOK.
-        """
+        """Hint pour le champ is_real_requirement dans le prompt BABOK."""
         hints = [
             "is_real_requirement = false si le texte est : légende de figure, "
             "header/footer, note administrative, mention de confidentialité, "
@@ -265,11 +245,11 @@ Analyse et retourne UNIQUEMENT ce JSON (sans markdown) :
     # ------------------------------------------------------------------ #
 
     def _detect_from_text(self, text: str):
-        """Détection heuristique à partir de la description utilisateur."""
+        """Détection heuristique à partir du contenu du fichier .md."""
         lower = text.lower()
 
         # Type de document
-        if any(w in lower for w in ["rfp", "appel d'offres", "appel d offres"]):
+        if any(w in lower for w in ["rfp", "appel d'offres", "appel d offres", "request for proposal"]):
             self.document_type = "RFP"
         elif any(w in lower for w in ["cctp", "cahier des clauses techniques", "cahier des charges"]):
             self.document_type = "CCTP"
@@ -295,7 +275,6 @@ Analyse et retourne UNIQUEMENT ce JSON (sans markdown) :
             self.language = "fr"
 
         # Détection automatique du pattern d'identifiants
-        # Cherche des patterns du type "BN-XXX", "REQ-XXX", "F-XXX", etc.
         id_hint = re.search(r'\b([A-Z]{1,6}[-_]\d{2,4})\b', text)
         if id_hint:
             prefix = re.match(r'([A-Z]{1,6})', id_hint.group(1)).group(1)
@@ -319,6 +298,8 @@ Analyse et retourne UNIQUEMENT ce JSON (sans markdown) :
             self.content_types.append("tableaux")
         if any(w in lower for w in ["exigence normée", "exigences normées", "bn-", "req-"]):
             self.content_types.append("exigences normées")
+        if any(w in lower for w in ["workflow", "flux de travail", "cycle de vie"]):
+            self.content_types.append("workflows")
 
     def _build_llm_hint(self):
         """Construit le hint court pour les prompts LLM."""

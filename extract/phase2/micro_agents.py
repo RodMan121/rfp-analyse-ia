@@ -167,7 +167,6 @@ class BABOKAgent(FSMAgent):
     def __init__(self, model=None, doc_context=None):
         super().__init__(model)
         self.doc_context = doc_context
-        # Regex d'ID : dynamique si un pattern est fourni par le contexte
         if doc_context is not None:
             self._id_re = doc_context.get_requirement_id_regex()
             self._extra_noise_re = doc_context.get_extra_noise_regex()
@@ -178,24 +177,20 @@ class BABOKAgent(FSMAgent):
     async def trigger(self, req: FSMRequirement) -> FSMRequirement:
         text = req.original_text
         if len(text) < 50:
-            return req  # Laisse passer pour la vision
+            return req
 
-        # Filtre bruit générique
         if _NOISE_RE.search(text) and "VISION" not in text:
             req.transition_to(RequirementState.ERROR, "Bruit structurel filtré")
             return req
 
-        # Filtre bruit spécifique au document
         if self._extra_noise_re and self._extra_noise_re.search(text) and "VISION" not in text:
             req.transition_to(RequirementState.ERROR, "Bruit documentaire filtré")
             return req
 
-        # Extraction de l'identifiant officiel avec le pattern du contexte
         id_re = self._id_re if self._id_re else _REQUIREMENT_ID_RE
         id_match = id_re.search(text) if id_re else None
         official_id = id_match.group(1) if id_match else None
 
-        # Bloc de contexte injecté dans le prompt
         ctx_block = ""
         if self.doc_context is not None:
             ctx_block = self.doc_context.build_babok_prompt_context()
@@ -221,7 +216,7 @@ class BABOKAgent(FSMAgent):
 Règle is_real_requirement : {is_req_hint}
 
 Texte à analyser :
-\"{text}\""""
+\"{text}\" """
 
         try:
             resp = await self._call_llm(prompt=prompt, format="json")
@@ -272,7 +267,6 @@ class FSMPipeline:
                          Si None, comportement générique.
         """
         self.doc_context = doc_context
-        # Ordre crucial : Vision d'abord pour transformer les images en texte
         self.factory = [
             VisionRequirementAgent(),
             BABOKAgent(doc_context=doc_context),

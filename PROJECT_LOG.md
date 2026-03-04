@@ -27,6 +27,7 @@
 - [x] **Correctifs Industriels** : Migration Docling v2 (`iterate_items`, `get_image`), robustesse des IDs officiels, et gestion des imports `os`/`time`.
 - [x] **Audit v11** : Remise à niveau industrielle (Filtre anti-bruit regex, ancrage BN-XXX, dédoublonnage sémantique).
 - [x] **Mise à jour v12 (Mars 2026)** : Implémentation du contexte documentaire générique (`DocumentContext`), adaptation dynamique du pipeline et des prompts LLM.
+- [x] **Mise à jour v13 (Mars 2026)** : Simplification du contexte documentaire via `data/document_context.md` (texte libre comme unique source de vérité).
 - [x] **Mise à jour Documentation (Mars 2026)** : Documentation complète (README, ARCHITECTURE, GUIDES) intégrant la Phase 3 Excel et le RAG.
 - [x] **Refonte Asynchrone (asyncio)** : Pipeline complet (`harvester` & `composer`) en mode asynchrone pour la performance.
 - [x] **Optimisation VRAM** : Pilotage du contexte (`num_ctx`) et de la concurrence pour GPU 4 Go.
