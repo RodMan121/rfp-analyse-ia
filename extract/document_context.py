@@ -169,6 +169,50 @@ class DocumentContext:
             logger.warning(f"⚠️ Pattern ID invalide '{self.requirement_id_pattern}': {e}")
             return None
 
+    def get_normatif_regex(self) -> re.Pattern:
+        """
+        Retourne le regex des verbes normatifs adapté à la langue du document.
+        Utilisé par BABOKAgent comme pré-filtre avant l'appel LLM.
+
+        Important : self.language décrit la langue du fichier .md (la description),
+        pas forcément la langue du PDF analysé. Un .md en français peut décrire
+        un document dont les exigences sont rédigées en anglais (must/shall).
+        Par défaut on utilise donc `mixed` (fr + en).
+        On ne spécialise que si l'utilisateur a explicitement indiqué la langue
+        du document (mot-clé 'en anglais', 'in english', 'document anglais'…).
+        """
+        # Signal fort : l'utilisateur a précisé que le PDF est en anglais
+        if self.language == "en" and any(
+            w in self.raw_description.lower()
+            for w in ["document anglais", "in english", "english document", "written in english"]
+        ):
+            pattern = (
+                r"\b(must|shall|should|is required|are required|"
+                r"need to|needs to|has to|have to|"
+                r"is mandatory|are mandatory|is prohibited|is allowed)\b"
+            )
+        # Signal fort : l'utilisateur a précisé que le PDF est en français
+        elif self.language == "fr" and any(
+            w in self.raw_description.lower()
+            for w in ["document français", "en français", "rédigé en français", "french document"]
+        ):
+            pattern = (
+                r"\b(doit|doivent|devra|devront|devrait|devraient|"
+                r"il faut|nécessite|nécessitent|requis|requise|"
+                r"obligatoire|obligatoires|interdit|interdite|"
+                r"autorisé|autorisée|peut\b|peuvent\b)\b"
+            )
+        else:
+            # Par défaut : mixed — couvre les documents bilingues ou dont
+            # la langue n'est pas explicitement précisée dans le .md
+            pattern = (
+                r"\b(must|shall|should|is required|are required|need to|has to|"
+                r"is mandatory|are mandatory|is prohibited|is allowed|"
+                r"doit|doivent|devra|devront|devrait|il faut|nécessite|"
+                r"requis|obligatoire|interdit|autorisé|peut\b|peuvent\b)\b"
+            )
+        return re.compile(pattern, re.IGNORECASE)
+
     def get_extra_noise_regex(self) -> Optional[re.Pattern]:
         """Retourne le pattern de bruit supplémentaire compilé, ou None."""
         if not self.extra_noise_patterns:
@@ -218,55 +262,74 @@ class DocumentContext:
 
     def build_is_requirement_hint(self) -> str:
         """
-        Hint pour le champ is_real_requirement dans le prompt BABOK.
-        Version v14 : liste noire explicite + règle de domaine.
+        Génère la règle is_real_requirement adaptée au document.
+        Entièrement dérivée du contexte — aucun pattern projet codé en dur.
         """
-        # --- Règle négative : liste noire explicite ---
+        # --- Règle négative universelle ---
         false_cases = (
             "is_real_requirement = false dans TOUS ces cas :\n"
-            "  - Titre de section ou sous-section seul (ex: '3.3 BOARDS DASHBOARD', 'D4 : Analysis')\n"
-            "  - Entrée de table des matières (ex: 'TABLE OF CONTENT', 'TABLE OF TABLES')\n"
-            "  - Label de champ seul sans verbe d'obligation (ex: 'Recom sol family', 'Sub ref status')\n"
-            "  - Légende de figure ou de tableau (ex: 'Table 5: Compliance level')\n"
+            "  - Titre de section ou sous-section seul\n"
+            "  - Entrée de table des matières ou liste de figures\n"
+            "  - Label de champ seul sans verbe d'obligation\n"
+            "  - Légende de figure ou de tableau\n"
             "  - Référence bibliographique ou documentaire\n"
-            "  - En-tête ou pied de page (numéro de page, confidentialité, 'Iss. 01-00')\n"
-            "  - Note administrative ou organisationnelle sans obligation\n"
-            "  - Fragment hors domaine du document (ex: satellite, énergie solaire si le document "
-            "    parle d'un outil logiciel)\n"
-            "  - Texte qui ne contient aucun des mots : must, shall, should, doit, devra, "
-            "    il faut, nécessite, requis, obligatoire, interdit, autorisé\n"
+            "  - En-tête ou pied de page\n"
+            "  - Note administrative sans obligation\n"
         )
 
-        # --- Règle positive : selon le type de document ---
-        if self.document_type == "RFP":
-            true_case = (
-                "is_real_requirement = true UNIQUEMENT si le texte exprime une obligation "
-                "fonctionnelle, une contrainte technique ou une règle métier "
-                "pour l'outil logiciel décrit dans ce RFP. "
-                "En cas de doute, mettre false."
+        # --- Règle négative de domaine (auto-générée depuis llm_context_hint) ---
+        if self.llm_context_hint and self.document_type != "UNKNOWN":
+            false_cases += (
+                f"  - Texte qui ne concerne manifestement pas : "
+                f"« {self.llm_context_hint} »\n"
             )
-        elif self.document_type == "CONTRACT":
-            true_case = (
-                "is_real_requirement = true UNIQUEMENT si le texte exprime une obligation "
-                "contractuelle, une clause ou une condition de service. "
-                "En cas de doute, mettre false."
+
+        # --- Règle négative linguistique (auto-générée depuis language) ---
+        if self.language == "en":
+            false_cases += (
+                "  - Texte sans aucun de ces mots : "
+                "must, shall, should, required, mandatory, prohibited, allowed\n"
+            )
+        elif self.language == "fr":
+            false_cases += (
+                "  - Texte sans aucun de ces mots : "
+                "doit, devra, devrait, il faut, nécessite, requis, "
+                "obligatoire, interdit, autorisé\n"
             )
         else:
-            true_case = (
-                "is_real_requirement = true UNIQUEMENT si le texte contient une obligation "
-                "claire avec un verbe normatif. En cas de doute, mettre false."
+            false_cases += (
+                "  - Texte sans aucun verbe d'obligation en français ou en anglais\n"
             )
 
-        # --- Règle de domaine : si un contexte est défini ---
-        domain_rule = ""
-        if self.llm_context_hint and self.document_type != "UNKNOWN":
-            domain_rule = (
-                f"\nContexte de référence : {self.llm_context_hint}\n"
-                "Si le texte ne concerne pas ce domaine (ex: exigence de satellite dans un RFP "
-                "d'outil logiciel), mettre is_real_requirement = false."
-            )
+        # --- Règle positive selon le type de document ---
+        true_cases = {
+            "RFP": (
+                "is_real_requirement = true UNIQUEMENT si le texte exprime "
+                "une obligation fonctionnelle, une contrainte technique ou "
+                "une règle métier pour le système décrit. En cas de doute : false."
+            ),
+            "CCTP": (
+                "is_real_requirement = true UNIQUEMENT si le texte exprime "
+                "une clause technique ou une prescription du cahier des charges. "
+                "En cas de doute : false."
+            ),
+            "CONTRACT": (
+                "is_real_requirement = true UNIQUEMENT si le texte exprime "
+                "une obligation contractuelle ou une condition de service. "
+                "En cas de doute : false."
+            ),
+            "SPEC": (
+                "is_real_requirement = true UNIQUEMENT si le texte exprime "
+                "une spécification technique vérifiable. En cas de doute : false."
+            ),
+        }
+        true_case = true_cases.get(
+            self.document_type,
+            "is_real_requirement = true UNIQUEMENT si une obligation claire est exprimée. "
+            "En cas de doute : false."
+        )
 
-        return f"{false_cases}\n{true_case}{domain_rule}"
+        return f"{false_cases}\n{true_case}"
 
     # ------------------------------------------------------------------ #
     #  Détection par règles                                                #
@@ -328,6 +391,64 @@ class DocumentContext:
             self.content_types.append("exigences normées")
         if any(w in lower for w in ["workflow", "flux de travail", "cycle de vie"]):
             self.content_types.append("workflows")
+
+        # Génération automatique des patterns de bruit hors-domaine
+        # Chaque domaine détecté implique que certains autres sujets sont du bruit
+        self._generate_domain_noise_patterns()
+
+    def _generate_domain_noise_patterns(self):
+        """
+        Génère automatiquement extra_noise_patterns selon le domaine détecté.
+        Principe : ce qui est clairement hors-domaine pour ce type de document est du bruit.
+        Aucun pattern spécifique à un projet n'est codé en dur ici.
+        """
+        # Patterns toujours ajoutés (bruit structurel universel)
+        universal = [
+            r"^table of content|^table of tables|^table of figures?",
+            r"^end of document|^fin du document",
+            r"^d[1-8]\s*:",                          # titres d'étapes "D4 : Analysis"
+            r"^section:\s*racine",                   # métadonnée structurelle interne
+            r"^\d+\.\d+\s+[A-Z][\w\s]{3,40}$",      # "3.3 BOARDS DASHBOARD" seul
+        ]
+        for p in universal:
+            if p not in self.extra_noise_patterns:
+                self.extra_noise_patterns.append(p)
+
+        # Patterns hors-domaine selon le domaine détecté
+        domain_exclusions = {
+            "IT": [
+                # Exigences matérielles / physiques / spatiales → hors-domaine d'un outil IT
+                r"solar panel|solar power|capture sunlight",
+                r"satellite must|satellite component",
+                r"antenna point|power management system",
+                r"alimentation en énergie du satellite",
+                r"panneaux? solaires?",
+            ],
+            "INFRASTRUCTURE": [
+                # Exigences d'interface utilisateur → hors-domaine d'une infrastructure
+                r"bouton|maquette|wireframe|champ de formulaire",
+                r"user interface|interface utilisateur",
+            ],
+            "METIER": [
+                # Exigences matérielles bas-niveau → hors-domaine métier
+                r"solar panel|hardware spec|physical layer",
+                r"voltage|ampere|watt",
+            ],
+            "JURIDIQUE": [
+                # Exigences techniques → hors-domaine juridique
+                r"cpu|ram|bandwidth|latency|throughput",
+            ],
+        }
+
+        for pattern in domain_exclusions.get(self.domain, []):
+            if pattern not in self.extra_noise_patterns:
+                self.extra_noise_patterns.append(pattern)
+
+        if self.extra_noise_patterns:
+            logger.debug(
+                f"🔧 {len(self.extra_noise_patterns)} patterns de bruit générés "
+                f"pour domaine={self.domain}"
+            )
 
     def _build_llm_hint(self):
         """Construit le hint court pour les prompts LLM."""

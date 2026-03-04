@@ -188,12 +188,21 @@ class BABOKAgent(FSMAgent):
     def __init__(self, model=None, doc_context=None):
         super().__init__(model)
         self.doc_context = doc_context
+        # Regex d'ID : dynamique si un pattern est fourni par le contexte
         if doc_context is not None:
             self._id_re = doc_context.get_requirement_id_regex()
             self._extra_noise_re = doc_context.get_extra_noise_regex()
+            # Pré-filtre normatif adapté à la langue du document
+            self._normatif_re = doc_context.get_normatif_regex()
         else:
             self._id_re = _REQUIREMENT_ID_RE
             self._extra_noise_re = None
+            # Fallback mixte si aucun contexte
+            self._normatif_re = re.compile(
+                r"\b(must|shall|should|is required|doit|devra|"
+                r"il faut|nécessite|requis|obligatoire)\b",
+                re.IGNORECASE
+            )
 
     async def trigger(self, req: FSMRequirement) -> FSMRequirement:
         text = req.original_text
@@ -208,18 +217,11 @@ class BABOKAgent(FSMAgent):
             req.transition_to(RequirementState.ERROR, "Bruit documentaire filtré")
             return req
 
-        # Pré-filtre lexical : rejet immédiat si aucun verbe normatif détecté
-        # Évite un appel LLM inutile sur du bruit résiduel
-        if "VISION" not in text:
-            _NORMATIF_RE = re.compile(
-                r"\b(must|shall|should|doit|devra|devront|il faut|nécessite|"
-                r"requis|obligatoire|interdit|autorisé|peut\b|peuvent\b|"
-                r"has to|have to|is required|are required|need to)\b",
-                re.IGNORECASE
-            )
-            if not _NORMATIF_RE.search(text):
-                req.transition_to(RequirementState.ERROR, "Aucun verbe normatif — non-exigence")
-                return req
+        # Pré-filtre normatif : rejet immédiat si aucun verbe d'obligation détecté
+        # Le regex est dérivé de doc_context.language — adaptatif, pas codé en dur
+        if "VISION" not in text and not self._normatif_re.search(text):
+            req.transition_to(RequirementState.ERROR, "Aucun verbe normatif — non-exigence")
+            return req
 
         id_re = self._id_re if self._id_re else _REQUIREMENT_ID_RE
         id_match = id_re.search(text) if id_re else None

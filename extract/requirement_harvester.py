@@ -75,40 +75,44 @@ class RequirementHarvester:
             ]
             results = await asyncio.gather(*jobs)
 
-        # --- DÉDUPLICATION v14 : par ID officiel en priorité, puis par citation normalisée ---
+        # --- DÉDUPLICATION v14 : deux niveaux ---
         #
-        # Stratégie à deux niveaux :
-        #   Niveau 1 — ID officiel : si deux exigences partagent le même BN-XXX ou IT_REQ-XXX,
-        #              on garde celle dont la citation_source est la plus longue (la plus complète).
-        #   Niveau 2 — Citation normalisée : pour les exigences sans ID, on déduplique
-        #              par similarité de préfixe sur les 120 premiers caractères normalisés.
-        #              Deux citations dont le préfixe à 80 chars est identique → doublon.
+        # Niveau 1 — Par ID officiel :
+        #   Deux exigences avec le même BN-XXX → on garde la citation la plus longue.
+        #   Générique : fonctionne avec n'importe quel format d'ID (BN-XXX, REQ-XXX, IT_REQ-XXX…)
+        #
+        # Niveau 2 — Par préfixe de citation (80 chars) :
+        #   Pour les sans-ID : deux citations dont les 80 premiers chars normalisés
+        #   sont identiques → doublon. Seuil minimum 15 chars pour éviter les faux positifs.
 
         # Étape 1 : regrouper par ID officiel, garder la citation la plus longue
         by_id: dict = {}
         no_id_list = []
+        INVALID_IDS = {"NULL", "AUCUN", "NONE", "BN-XXX", "REQ-XXX", "IT_REQ-XXX"}
+
         for r in fsm_objects:
             oid = (r.metadata.get("official_id") or "").strip().upper()
-            if oid and oid not in ("NULL", "AUCUN", "BN-XXX"):
+            if oid and oid not in INVALID_IDS and len(oid) >= 3:
                 if oid not in by_id:
                     by_id[oid] = r
                 else:
-                    # Garder la plus longue citation (plus informative)
+                    # Garder la citation la plus longue (la plus informative)
                     if len(r.source_quote) > len(by_id[oid].source_quote):
                         logger.debug(f"♻️ Doublon ID {oid} : remplacement par citation plus longue")
                         by_id[oid] = r
                     else:
-                        logger.debug(f"♻️ Doublon ID {oid} : citation courte ignorée")
+                        logger.debug(f"♻️ Doublon ID {oid} : ignoré (citation plus courte)")
             else:
                 no_id_list.append(r)
 
-        # Étape 2 : dédupliquer les sans-ID par préfixe de citation (80 chars)
+        # Étape 2 : dédupliquer les sans-ID par préfixe normalisé (80 chars)
         seen_prefix: dict = {}
         unique_no_id = []
         for r in no_id_list:
             prefix = " ".join(r.source_quote.lower().split())[:80]
-            if not prefix or len(prefix) < 15:
-                continue  # Citation trop courte = bruit résiduel
+            if len(prefix) < 15:
+                logger.debug(f"♻️ Citation trop courte ignorée [{r.uid[:8]}] : '{prefix}'")
+                continue
             if prefix in seen_prefix:
                 logger.debug(f"♻️ Doublon citation [{r.uid[:8]}] ≈ [{seen_prefix[prefix][:8]}]")
                 continue
@@ -116,11 +120,11 @@ class RequirementHarvester:
             unique_no_id.append(r)
 
         deduplicated = list(by_id.values()) + unique_no_id
+        nb_removed = len(fsm_objects) - len(deduplicated)
 
-        nb_id_dedup = len(fsm_objects) - len(by_id) - len(no_id_list) + (len(no_id_list) - len(unique_no_id))
         logger.info(
-            f"🧹 Déduplication v14 : {len(fsm_objects)} → {len(deduplicated)} exigences uniques "
-            f"({len(by_id)} avec ID officiel, {len(unique_no_id)} sans ID, {nb_id_dedup} doublons supprimés)"
+            f"🧹 Déduplication v14 : {len(fsm_objects)} → {len(deduplicated)} "
+            f"({len(by_id)} avec ID, {len(unique_no_id)} sans ID, {nb_removed} doublons supprimés)"
         )
         self._save_registry(deduplicated)
         logger.success(f"✅ Moissonnage terminé : {len(deduplicated)} exigences en attente.")
