@@ -75,6 +75,8 @@ class RequirementHarvester:
             ]
             results = await asyncio.gather(*jobs)
 
+        fsm_objects = [r for r in results if r is not None and r.state != RequirementState.ERROR]
+
         # --- DÉDUPLICATION v14 : deux niveaux ---
         #
         # Niveau 1 — Par ID officiel :
