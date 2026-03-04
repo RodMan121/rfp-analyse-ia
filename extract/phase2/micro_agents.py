@@ -167,6 +167,7 @@ class BABOKAgent(FSMAgent):
     def __init__(self, model=None, doc_context=None):
         super().__init__(model)
         self.doc_context = doc_context
+        # Regex d'ID : dynamique si un pattern est fourni par le contexte
         if doc_context is not None:
             self._id_re = doc_context.get_requirement_id_regex()
             self._extra_noise_re = doc_context.get_extra_noise_regex()
@@ -176,56 +177,71 @@ class BABOKAgent(FSMAgent):
 
     async def trigger(self, req: FSMRequirement) -> FSMRequirement:
         text = req.original_text
-        if len(text) < 50: return req
+        if len(text) < 50:
+            return req  # Laisse passer pour la vision
 
+        # Filtre bruit générique
         if _NOISE_RE.search(text) and "VISION" not in text:
-            req.transition_to(RequirementState.ERROR, "Bruit structurel")
+            req.transition_to(RequirementState.ERROR, "Bruit structurel filtré")
             return req
 
+        # Filtre bruit spécifique au document
         if self._extra_noise_re and self._extra_noise_re.search(text) and "VISION" not in text:
-            req.transition_to(RequirementState.ERROR, "Bruit documentaire")
+            req.transition_to(RequirementState.ERROR, "Bruit documentaire filtré")
             return req
 
+        # Extraction de l'identifiant officiel avec le pattern du contexte
         id_re = self._id_re if self._id_re else _REQUIREMENT_ID_RE
-        official_id = None
-        if id_re:
-            id_match = id_re.search(text)
-            if id_match:
-                try:
-                    official_id = id_match.group(1)
-                except IndexError:
-                    official_id = id_match.group(0)
+        id_match = id_re.search(text) if id_re else None
+        official_id = id_match.group(1) if id_match else None
 
-        ctx_block = self.doc_context.build_babok_prompt_context() if self.doc_context else ""
-        is_req_hint = self.doc_context.build_is_requirement_hint() if self.doc_context else "is_real_requirement = false si pas d'obligation claire."
+        # Bloc de contexte injecté dans le prompt
+        ctx_block = ""
+        if self.doc_context is not None:
+            ctx_block = self.doc_context.build_babok_prompt_context()
+            is_req_hint = self.doc_context.build_is_requirement_hint()
+        else:
+            is_req_hint = (
+                "is_real_requirement = false si le texte est une légende, un header, "
+                "une note administrative ou ne contient pas d'obligation fonctionnelle."
+            )
 
         prompt = f"""Tu es un expert BABOK v3. Analyse cette exigence et retourne ce JSON :
 {{
-  "sujet": "acteur ou système",
-  "action": "must/shall/should",
-  "objet": "réalisation",
-  "citation_source": "verbatim (40-200 chars)",
-  "official_id": "identifiant type '{self.doc_context.requirement_id_example if self.doc_context else 'BN-XXX'}', sinon null",
+  "sujet": "acteur ou système concerné",
+  "action": "verbe d'obligation (must/shall/should ou équivalent français)",
+  "objet": "ce qui doit être réalisé",
+  "citation_source": "citation verbatim de l'exigence (40-200 chars, ou synthèse si image)",
+  "official_id": "identifiant officiel trouvé (ex: {self.doc_context.requirement_id_example if self.doc_context and self.doc_context.requirement_id_example else 'BN-039 ou REQ-001'}), sinon null",
   "is_real_requirement": true/false
 }}
+
 {ctx_block}
+
 Règle is_real_requirement : {is_req_hint}
-Texte : \"{text}\""""
+
+Texte à analyser :
+\"{text}\""""
 
         try:
             resp = await self._call_llm(prompt=prompt, format="json")
             data = self._clean_json(resp.get("response", "{}"))
+
             if not data.get("is_real_requirement", True):
-                req.transition_to(RequirementState.ERROR, "Non-exigence")
+                req.transition_to(RequirementState.ERROR, "Non-exigence confirmée")
                 return req
+
             req.source_quote = data.get("citation_source", "")
             req.subject = data.get("sujet", "")
             req.action = data.get("action", "")
             req.target_object = data.get("objet", "")
             final_id = official_id or data.get("official_id")
-            if final_id: req.metadata["official_id"] = final_id
-            req.transition_to(RequirementState.NORMALIZED, "Conversion BABOK")
-        except Exception: req.transition_to(RequirementState.ERROR, "Erreur BABOK")
+            if final_id:
+                req.metadata["official_id"] = final_id
+
+            req.transition_to(RequirementState.NORMALIZED, "Conversion BABOK réussie")
+        except Exception as e:
+            req.transition_to(RequirementState.ERROR, f"Erreur BABOK: {e}")
         return req
 
 class WolfRadarAgent(FSMAgent):
@@ -250,7 +266,13 @@ class ISO25010Agent(FSMAgent):
 
 class FSMPipeline:
     def __init__(self, doc_context=None):
+        """
+        Args:
+            doc_context: DocumentContext pour adapter tous les agents au document.
+                         Si None, comportement générique.
+        """
         self.doc_context = doc_context
+        # Ordre crucial : Vision d'abord pour transformer les images en texte
         self.factory = [
             VisionRequirementAgent(),
             BABOKAgent(doc_context=doc_context),
@@ -258,11 +280,15 @@ class FSMPipeline:
             ISO25010Agent(),
         ]
         if doc_context:
-            logger.info(f"⚙️ Pipeline FSM initialisé avec contexte : {doc_context.document_type}")
+            logger.info(
+                f"⚙️  Pipeline FSM initialisé avec contexte : "
+                f"{doc_context.document_type} | pattern={doc_context.requirement_id_pattern or 'générique'}"
+            )
 
     async def run_factory(self, text: str, uid: str, metadata: Dict = None) -> FSMRequirement:
         req = FSMRequirement(uid=uid, original_text=text, metadata=metadata or {})
         for agent in self.factory:
             req = await agent.trigger(req)
-            if req.state == RequirementState.ERROR: break
+            if req.state == RequirementState.ERROR:
+                break
         return req
