@@ -1,58 +1,52 @@
-# 🔰 Guide Débutant : L'Usine à Appels d'Offres
+# 🔰 Guide Débutant : Bienvenue à l'Usine (v13)
 
-Bienvenue ! Ce guide explique comment l'IA ne se contente plus de lire vos documents, mais les traite comme dans une véritable usine.
-
----
-
-## 🏭 Le Concept : L'Usine en 3 Ateliers
-
-Oubliez le concept du "Chatbot" (type ChatGPT) à qui vous posez des questions. Ici, nous avons construit une **Chaîne de Montage**.
-
-### 1. Atelier de Découpage (La Dissociation)
-Vous donnez un gros document PDF à l'usine. Les machines le découpent en centaines de petits paragraphes.
-*   **Le truc malin :** Chaque paragraphe reçoit un "Code Barre" unique (un hash MD5). Impossible pour l'IA d'inventer une phrase qui n'existe pas, car on garde toujours la trace de son code barre.
-
-### 2. Atelier de Traitement (Les Micro-Agents)
-Chaque paragraphe passe ensuite sur un tapis roulant où trois "Robots Experts" l'analysent :
-*   **Le Robot BABOK** : Il réécrit les phrases floues du client en vraies spécifications techniques.
-*   **Le Radar à Loups** : Il cherche les mots dangereux (*"rapide", "efficace"*). S'il en trouve un, il met un feu rouge 🛑 (l'exigence est bloquée).
-*   **Le Robot ISO** : Il vérifie ce que le client a oublié de dire (ex: "Vous parlez de paiement, mais pas de sécurité !").
-
-### 3. Atelier d'Assemblage (La Synthèse)
-L'usine récupère uniquement les paragraphes qui ont reçu un "Feu Vert" au deuxième atelier. Elle les assemble pour créer votre livrable final : une **Baseline Technique** propre, chiffrable et sans risque.
+Ce guide utilise la métaphore de l'usine pour vous expliquer comment l'IA transforme un PDF complexe en une liste d'exigences claires.
 
 ---
 
-## 🚦 Comment utiliser l'usine ?
+## 🏭 Le Concept : Votre Document sur un Tapis Roulant
 
-Vous êtes le chef d'atelier. Voici vos 3 commandes :
+Imaginez que votre document PDF est une grosse pièce brute. Pour la traiter, nous allons la faire passer par **trois ateliers**.
 
-1.  **Préparer le terrain (Initialisation)** :
-    Avant de découper le document, vous devez expliquer aux robots à quoi il ressemble.
-    `python extract/main.py --init-context`
-    Ouvrez le fichier `data/document_context.md` qui vient d'être créé et décrivez simplement votre document (ex: "C'est un RFP pour l'ESSP, les exigences sont de type BN-XXX"). C'est la seule source de vérité pour l'usine.
+### 🛠️ Atelier 0 : Le Brief du Chef (Initialisation)
+Avant de démarrer, vous devez dire aux robots ce qu'ils vont traiter.
+1.  Lancez `python extract/main.py --init-context`.
+2.  Ouvrez `data/document_context.md` et écrivez simplement : *"C'est un RFP pour une application, les exigences sont de type BN-XXX et il y a des maquettes."*
+3.  **C'est tout !** Vos robots sont maintenant briefés.
 
-2.  **Démarrer les machines (Ingestion)** :
-    Mettez votre PDF dans `data/input/` et lancez l'ingestion. Elle lira automatiquement vos instructions dans le fichier `.md`.
-    `python extract/main.py --input data/input/mon_document.pdf`
+### ✂️ Atelier 1 : La Découpe (Phase 1)
+Vous donnez votre PDF. Les machines le découpent en centaines de petits paragraphes atomiques.
+*   **Magie de la Vision** : Si une image est un schéma technique, le robot la prend en photo pour l'analyser plus tard.
+*   **Résultat** : Une base de données de fragments "bruts" (`data/chroma_db_hierarchical`).
 
-3.  **Lancer le tapis roulant (Le Moissonnage)** :
-    Vous dites aux robots d'inspecter l'intégralité des pièces :
-    `python extract/requirement_harvester.py`
-    *(C'est ici que la magie opère : grâce à l'asynchronisme, plusieurs robots travaillent en parallèle pour traiter des centaines de pages en un temps record).*
+### 🤖 Atelier 2 : Le Tapis des Experts (Phase 2)
+C'est ici que le travail intelligent se fait. Chaque paragraphe défile sur un tapis roulant devant des robots experts :
+1.  **Le Robot Vision** : Traduit les schémas en texte.
+2.  **Le Robot BABOK** : Réécrit la phrase pour qu'elle soit claire (Sujet, Verbe, Complément).
+3.  **Le Radar à Ambiguïté** : Si la phrase est floue (ex: *"le système doit être rapide"*), il allume un feu rouge 🚩. L'exigence est bloquée.
 
-4.  **Emballer le produit final (La Baseline)** :
-    Vous générez la Technical Baseline (Markdown & JSON) et la matrice Excel :
-    `python extract/phase3/composer.py`
-    `python extract/phase3/excel_generator.py`
-
----
-
-## 🕵️ Et si je veux juste discuter avec mon document ?
-Si vous avez besoin de comprendre pourquoi un point est bloqué, vous pouvez toujours utiliser le vieux système de "Chatbot" pour enquêter :
-`python extract/rfp_agent.py "Pourquoi ce point est bloqué ?"`
-
+### 📦 Atelier 3 : L'Emballage (Phase 3)
+On récupère uniquement les exigences qui ont reçu un feu vert. On les assemble dans de beaux rapports :
+*   **Le Catalogue (Markdown)** pour votre lecture.
+*   **La Matrice (Excel)** pour votre chiffrage.
+*   **Le Fichier ALM (JSON)** pour vos outils de gestion (Jira).
 
 ---
 
-🔒 **Votre Sécurité** : Cette usine est construite **dans votre ordinateur**. Aucune donnée confidentielle ne sort par les tuyaux d'internet.
+## 🚀 Vos 4 Commandes "Coup de Poing"
+
+| Étape | Commande à taper | Résultat attendu |
+| :--- | :--- | :--- |
+| **0** | `python extract/main.py --init-context` | Crée le fichier de description. |
+| **1** | `python extract/main.py --input mon_rfp.pdf` | Découpe le PDF en fragments. |
+| **2** | `python extract/requirement_harvester.py` | Fait travailler les robots experts. |
+| **3** | `python extract/phase3/composer.py` | Génère les rapports finaux. |
+| **4** | `python extract/phase3/excel_generator.py` | Produit la matrice Excel. |
+
+---
+
+## 🕵️ Envie de discuter avec le document ?
+Si vous voulez poser une question précise sur un point de détail :
+`python extract/rfp_agent.py "Quels sont les délais de livraison ?"`
+
+🔒 **Confidentialité** : Tout se passe dans **votre ordinateur**. Rien n'est envoyé sur le cloud si vous utilisez Ollama.
