@@ -1,4 +1,4 @@
-# 🏗️ Architecture Déterministe : FSM-Driven Engine (v13)
+# 🏗️ Architecture Déterministe : FSM-Driven Engine (v14)
 
 Ce document décrit l'organisation industrielle de l'Usine à RFP basée sur une Machine à État Finis, une exécution asynchrone et des capacités multimodales.
 
@@ -22,14 +22,14 @@ graph TD
         VIS -->|Agent BABOK| BAB[🔄 Normalisation]
         BAB -->|Agent Radar| RAD[🚩 Audit Ambiguïté]
         RAD -->|Agent ISO 25010| ISO[✅ Certification]
-        ISO --> DEDUP[Dédoublonnage Sémantique]
+        ISO --> DEDUP[Dédoublonnage v14]
     end
     
     subgraph "PHASE 3 : Associer"
         DEDUP -->|Certification| BASE{BASELINE}
         BASE --> J[📄 Rendu Markdown]
         BASE --> K[💾 Rendu JSON ALM]
-        BASE --> L[📊 Matrice Excel v13]
+        BASE --> L[📊 Matrice Excel]
     end
 ```
 
@@ -50,17 +50,26 @@ Chaque fragment passe par un tapis roulant d'états :
 
 ---
 
-## 🎯 3. L'Innovation `document_context.md` (Single Source of Truth)
+## 🎯 3. L'Innovation `document_context.md` (Auto-Adaptatif)
 
-Le pipeline v13 est devenu **agnostique**. Au lieu de configurer le code, l'utilisateur décrit son document en texte libre dans `data/document_context.md`.
+Le pipeline v14 est devenu **100% agnostique et auto-adaptatif**. L'utilisateur décrit son document en texte libre dans `data/document_context.md`. Le système en déduit automatiquement :
 
-- **Détection d'ID** : Les patterns comme `BN-XXX` ou `REQ-XXX` sont auto-détectés.
-- **Adaptation des Prompts** : Si vous décrivez des "maquettes fils de fer", l'agent BABOK est briefé pour extraire les boutons et les champs comme exigences fonctionnelles.
-- **Filtrage Intelligent** : Les patterns de bruit spécifiques (ex: headers répétitifs) sont filtrés selon la nature du document déclarée.
+- **Règles d'Extraction (`is_real_requirement`)** : Une liste noire stricte (8 règles) est croisée avec une règle positive de domaine.
+- **Filtres de Bruit Hors-Domaine** : Si le domaine est 'IT', les exigences parlant de 'panneaux solaires' sont automatiquement ignorées avant même d'interroger le LLM.
+- **Verbes Normatifs Dynamiques** : Détecte la langue (Fr/En) pour appliquer le bon filtre de verbes (`must/shall` vs `doit/devra`).
+- **Détection d'ID** : Auto-détection des patterns d'identifiants (ex: `BN-XXX`).
 
 ---
 
-## ⚡ 4. Performance & Observabilité
+## 🔍 4. Dédoublonnage Sémantique v14
+
+Le `RequirementHarvester` utilise une stratégie robuste à deux niveaux pour garantir une unicité parfaite :
+1.  **Par ID Officiel** : Si plusieurs fragments partagent le même identifiant (ex: `BN-044`), on conserve uniquement celui dont la citation est la plus riche et complète.
+2.  **Par Préfixe Normalisé** : Pour les exigences sans ID, on compare les 80 premiers caractères de la citation normalisée.
+
+---
+
+## ⚡ 5. Performance & Observabilité
 
 - **Asynchronisme (asyncio)** : Le `RequirementHarvester` traite les fragments en parallèle.
 - **Sémaphores** : Contrôle du flux (par défaut 2 requêtes concurrentes) pour protéger la VRAM du GPU local.

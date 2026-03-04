@@ -19,12 +19,13 @@ data/
 
 ## 🚀 Le Workflow Industriel (4 Étapes)
 
-### 0. Initialisation (Nouveau ✨)
+### 0. Initialisation (Le Contexte v14)
 Générez le template de contexte pour votre document.
 ```bash
 python extract/main.py --init-context
 ```
-Ouvrez `data/document_context.md` et remplissez-le en texte libre. C'est ici que vous définissez la nature du document, les identifiants (ex: BN-XXX), etc. C'est la **seule source de vérité** pour le guidage des agents.
+Ouvrez `data/document_context.md` et remplissez-le en texte libre. C'est ici que vous définissez la nature du document, la langue, et le domaine. **C'est la seule source de vérité.**
+*Nouveauté v14* : En lisant ce fichier, l'usine génère automatiquement les filtres de bruit (ex: exclure "panneaux solaires" pour un projet IT) et sélectionne les verbes normatifs appropriés (must/shall vs doit/devra).
 
 ### 1. Ingestion (Phase 1)
 Préparez la matière première. L'usine lit automatiquement votre fichier `document_context.md`.

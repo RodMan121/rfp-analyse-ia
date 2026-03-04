@@ -1,6 +1,8 @@
-# 🏭 Augmented BID IA — L'Usine à RFP (v13)
+# 🏭 Augmented BID IA — L'Usine à RFP (v14 Générique)
 
 **Transformez vos Appels d'Offres complexes en "Technical Baselines" certifiées. Une approche industrielle, déterministe et multimodale pilotée par une Machine à États (FSM).**
+
+> **Nouveauté v14 :** Le pipeline est désormais 100% générique et auto-adaptatif. Il déduit automatiquement les filtres de bruit hors-domaine et les règles d'extraction normatives depuis votre description en texte libre, et intègre une déduplication sémantique avancée.
 
 ---
 
