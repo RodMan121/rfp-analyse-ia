@@ -11,6 +11,8 @@ Ce projet n'est pas un système RAG classique, c'est une **Machine à État Fini
 - **Dissocier (Phase 1)** : Ancrage MD5 strict obligatoire. Filtrage du bruit structurel (regex) et adaptation thématique via `DocumentContext` dès l'ingestion.
 - **Traiter (Phase 2)** : Utilisation exclusive du pattern **Micro-Agents**. L'agent BABOK doit utiliser `DocumentContext` pour adapter ses regex d'ID et ses prompts.
 - **Associer (Phase 3)** : Dédoublonnage sémantique obligatoire avant certification. Seules les exigences `CLEAN`, `AUDITED` ou `NORMALIZED` avec identifiant officiel sont éligibles à la baseline.
+- **Livrables Finaux** : Génération systématique de la **Technical Baseline** (Markdown/JSON) et de la **Matrice de Conformité Excel** (`excel_generator.py`).
+- **Interface Interactive** : Utilisation de `rfp_agent.py` (RAG) pour l'exploration conversationnelle et multimodale du document.
 
 ## 🛠️ Stack & Standards Techniques
 - **Pipeline Multimodal** : Les images extraites du PDF sont stockées dans `data/output_images/`. Le `FSMAgent` doit supporter le passage d'un `image_path` à `_call_llm()`.
