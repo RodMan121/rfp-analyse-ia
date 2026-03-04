@@ -217,28 +217,56 @@ class DocumentContext:
         return "\n".join(parts) if parts else ""
 
     def build_is_requirement_hint(self) -> str:
-        """Hint pour le champ is_real_requirement dans le prompt BABOK."""
-        hints = [
-            "is_real_requirement = false si le texte est : légende de figure, "
-            "header/footer, note administrative, mention de confidentialité, "
-            "référence bibliographique, titre de section seul."
-        ]
+        """
+        Hint pour le champ is_real_requirement dans le prompt BABOK.
+        Version v14 : liste noire explicite + règle de domaine.
+        """
+        # --- Règle négative : liste noire explicite ---
+        false_cases = (
+            "is_real_requirement = false dans TOUS ces cas :\n"
+            "  - Titre de section ou sous-section seul (ex: '3.3 BOARDS DASHBOARD', 'D4 : Analysis')\n"
+            "  - Entrée de table des matières (ex: 'TABLE OF CONTENT', 'TABLE OF TABLES')\n"
+            "  - Label de champ seul sans verbe d'obligation (ex: 'Recom sol family', 'Sub ref status')\n"
+            "  - Légende de figure ou de tableau (ex: 'Table 5: Compliance level')\n"
+            "  - Référence bibliographique ou documentaire\n"
+            "  - En-tête ou pied de page (numéro de page, confidentialité, 'Iss. 01-00')\n"
+            "  - Note administrative ou organisationnelle sans obligation\n"
+            "  - Fragment hors domaine du document (ex: satellite, énergie solaire si le document "
+            "    parle d'un outil logiciel)\n"
+            "  - Texte qui ne contient aucun des mots : must, shall, should, doit, devra, "
+            "    il faut, nécessite, requis, obligatoire, interdit, autorisé\n"
+        )
+
+        # --- Règle positive : selon le type de document ---
         if self.document_type == "RFP":
-            hints.append(
-                "is_real_requirement = true si le texte exprime une obligation "
-                "fonctionnelle, une contrainte technique ou une règle métier."
+            true_case = (
+                "is_real_requirement = true UNIQUEMENT si le texte exprime une obligation "
+                "fonctionnelle, une contrainte technique ou une règle métier "
+                "pour l'outil logiciel décrit dans ce RFP. "
+                "En cas de doute, mettre false."
             )
         elif self.document_type == "CONTRACT":
-            hints.append(
-                "is_real_requirement = true si le texte exprime une obligation "
-                "contractuelle, une clause ou une condition de service."
+            true_case = (
+                "is_real_requirement = true UNIQUEMENT si le texte exprime une obligation "
+                "contractuelle, une clause ou une condition de service. "
+                "En cas de doute, mettre false."
             )
         else:
-            hints.append(
-                "is_real_requirement = true si le texte exprime une obligation, "
-                "une contrainte ou une règle claire."
+            true_case = (
+                "is_real_requirement = true UNIQUEMENT si le texte contient une obligation "
+                "claire avec un verbe normatif. En cas de doute, mettre false."
             )
-        return " ".join(hints)
+
+        # --- Règle de domaine : si un contexte est défini ---
+        domain_rule = ""
+        if self.llm_context_hint and self.document_type != "UNKNOWN":
+            domain_rule = (
+                f"\nContexte de référence : {self.llm_context_hint}\n"
+                "Si le texte ne concerne pas ce domaine (ex: exigence de satellite dans un RFP "
+                "d'outil logiciel), mettre is_real_requirement = false."
+            )
+
+        return f"{false_cases}\n{true_case}{domain_rule}"
 
     # ------------------------------------------------------------------ #
     #  Détection par règles                                                #

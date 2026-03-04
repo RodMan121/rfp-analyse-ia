@@ -23,12 +23,33 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 # --- Regex de bruit et d'ID ---
 _NOISE_RE = re.compile(
+    # Éléments structurels du document
     r"if printed|confidential information|iss\. \d+-\d+"
-    r"|page \d+ of \d+|figure \d+\s*:|signature sheet"
+    r"|page \d+ of [\d]+|figure \d+\s*:|signature sheet"
     r"|document creation|applicable version"
     r"|this chapter must be quoted|section:\s*user requirement"
+    # Titres de sections et tables
+    r"|^table of content|^table of tables|^table of figure"
+    r"|^end of document|^appendix|^annexe"
+    r"|^\d+\.\d+[\s\w]+$"                      # ex: "3.3 BOARDS DASHBOARD"
+    r"|^section:\s*racine"                      # métadonnée structurelle
+    r"|^d[1-8]\s*:"                             # ex: "D4 : Analysis and TOI/OWA"
+    # Labels de champ seuls (sans verbe d'obligation)
+    r"|^recom sol family$|^next board\s*/\s*panel"
+    r"|^verify efficiency$|^sub ref status$"
+    r"|^ready for board|^other service impact"
+    r"|^impact security$|^unsuccessful login$"
+    # Références documentaires
+    r"|please refer to essp-rd|compliance_matrix"
+    r"|essp company is located|headquarter.*b612"
+    # Fragments hors-domaine (satellite, énergie)
+    r"|solar power generation|solar panel"
+    r"|capture sunlight|satellite must have"
+    r"|antenna point system|power management system"
+    r"|alimentation en énergie du satellite"
+    # Identifiants parasites en colonne ID
     r"|^\s*(green|certified ansp)\s*$",
-    re.IGNORECASE
+    re.IGNORECASE | re.MULTILINE
 )
 
 _REQUIREMENT_ID_RE = re.compile(
@@ -186,6 +207,19 @@ class BABOKAgent(FSMAgent):
         if self._extra_noise_re and self._extra_noise_re.search(text) and "VISION" not in text:
             req.transition_to(RequirementState.ERROR, "Bruit documentaire filtré")
             return req
+
+        # Pré-filtre lexical : rejet immédiat si aucun verbe normatif détecté
+        # Évite un appel LLM inutile sur du bruit résiduel
+        if "VISION" not in text:
+            _NORMATIF_RE = re.compile(
+                r"\b(must|shall|should|doit|devra|devront|il faut|nécessite|"
+                r"requis|obligatoire|interdit|autorisé|peut\b|peuvent\b|"
+                r"has to|have to|is required|are required|need to)\b",
+                re.IGNORECASE
+            )
+            if not _NORMATIF_RE.search(text):
+                req.transition_to(RequirementState.ERROR, "Aucun verbe normatif — non-exigence")
+                return req
 
         id_re = self._id_re if self._id_re else _REQUIREMENT_ID_RE
         id_match = id_re.search(text) if id_re else None
