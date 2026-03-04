@@ -1,135 +1,145 @@
 import json
 import pandas as pd
+import re
 from pathlib import Path
 from loguru import logger
+from openpyxl.styles import Alignment, PatternFill, Font
 
-# Configuration des chemins
+# Configuration
 REGISTRY_PATH = Path("data/fsm_registry.json")
 OUTPUT_EXCEL = Path("data/Matrice_Conformite_RFP.xlsx")
 
 class ExcelGenerator:
-    """Générateur de matrice de conformité Excel avec filtrage anti-bruit et MoSCoW."""
+    """Générateur de précision pour la matrice de conformité (v13)."""
 
     def __init__(self, registry_path: Path):
         self.registry_path = registry_path
-        self.requirements = []
-        self.must = []
-        self.should = []
-        self.could = []
-        self.other = []
+        self.categories = {"MUST": [], "SHOULD": [], "COULD": [], "WONT": []}
         self.rejected_noise = []
+        self.seen_hashes = set()
 
-    def load_and_filter(self):
-        """Charge le registre FSM et sépare le bon grain de l'ivraie."""
+    def _is_noise(self, entry: dict) -> bool:
+        """Détecteur de bruit haute précision."""
+        sujet = str(entry.get("subject", "")).strip()
+        action = str(entry.get("action", "")).strip()
+        objet = str(entry.get("target_object", "")).strip()
+        source = str(entry.get("source_quote", "")).strip()
+        
+        # 1. Critères de vide
+        if any(not val or val.lower() in ["null", "none", "aucun", "n/a", "unknown"] for val in [sujet, action, objet]):
+            return True
+            
+        # 2. Critères de longueur (Anti-bruit atomique)
+        if len(sujet) < 3 or len(objet) < 3:
+            return True
+
+        # 3. Patterns de structure documentaires
+        noise_patterns = [
+            r"table of", r"page \d+", r"figure \d+", r"appendix", r"end of",
+            r"confidential", r"iss\.", r"applicable version", r"certified by",
+            r"section:", r"\|", r"---", r"___"
+        ]
+        if any(re.search(p, source, re.IGNORECASE) for p in noise_patterns):
+            return True
+
+        # 4. Anti-doublon sémantique local (basé sur la citation)
+        quote_hash = hash(source.lower().strip())
+        if quote_hash in self.seen_hashes:
+            return True
+        self.seen_hashes.add(quote_hash)
+
+        return False
+
+    def _get_moscow(self, action: str, source: str) -> str:
+        """Tri MoSCoW avec gestion des interdictions."""
+        text = (action + " " + source).lower()
+        
+        if any(w in text for w in ["cannot", "must not", "shall not", "interdit", "ne doit pas"]):
+            return "WONT"
+        if any(w in text for w in ["must", "shall", "doit", "required", "obligatoire"]):
+            return "MUST"
+        if any(w in text for w in ["should", "devrait", "recommended", "recommandé"]):
+            return "SHOULD"
+        if any(w in text for w in ["can", "could", "may", "peut", "might", "possible"]):
+            return "COULD"
+        return "WONT"
+
+    def load_and_process(self):
         if not self.registry_path.exists():
-            logger.error(f"❌ Fichier {self.registry_path} introuvable.")
+            logger.error("❌ Registre introuvable.")
             return
 
         with open(self.registry_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        noise_keywords = [
-            "TABLE OF", "END OF DOCUMENT", "SECTION: Racine", 
-            "APPENDIX", "aucune exigence explicite", "Table "
-        ]
-
         for entry in data:
-            # 1. Nettoyage et Filtrage (Anti-Bruit)
-            sujet = str(entry.get("subject", "")).lower()
-            action = str(entry.get("action", "")).lower()
-            source = str(entry.get("source_quote", "")).upper()
+            formatted = {
+                "ID Officiel": entry.get("metadata", {}).get("official_id", "N/A"),
+                "Sujet": entry.get("subject", ""),
+                "Action": entry.get("action", ""),
+                "Objet": entry.get("target_object", ""),
+                "Citation Source": entry.get("source_quote", ""),
+                "Page": entry.get("metadata", {}).get("page", "?"),
+                "Qualité (%)": 100 - int(entry.get("ambiguity_score", 0)),
+                "Statut": "À vérifier"
+            }
 
-            is_null = any(val in [sujet, action] for val in ["null", "none", "aucun", ""])
-            has_noise_kw = any(kw.upper() in source for kw in noise_keywords)
-
-            if is_null or has_noise_kw:
-                self.rejected_noise.append(self._format_entry(entry))
-                continue
-
-            # 2. Catégorisation MoSCoW
-            formatted = self._format_entry(entry)
-            action_full = (action + " " + source.lower())
-            
-            if any(w in action_full for w in ["must", "shall", "doit", "required", "obligatoire"]):
-                self.must.append(formatted)
-            elif any(w in action_full for w in ["should", "devrait", "recommended", "recommandé"]):
-                self.should.append(formatted)
-            elif any(w in action_full for w in ["can", "could", "may", "peut", "might"]):
-                self.could.append(formatted)
+            if self._is_noise(entry):
+                formatted["Raison Rejet"] = "Bruit ou Doublon"
+                self.rejected_noise.append(formatted)
             else:
-                self.other.append(formatted)
-
-    def _format_entry(self, entry: dict) -> dict:
-        """Prépare une entrée pour le DataFrame pandas."""
-        meta = entry.get("metadata", {})
-        return {
-            "ID Officiel": meta.get("official_id", "N/A"),
-            "Sujet": entry.get("subject", ""),
-            "Action": entry.get("action", ""),
-            "Objet": entry.get("target_object", ""),
-            "Citation Source": entry.get("source_quote", ""),
-            "Page": meta.get("page", "?"),
-            "Ambiguïté (0-100)": entry.get("ambiguity_score", 0),
-            "Texte Original": entry.get("original_text", "") # Gardé pour l'onglet rejet
-        }
+                cat = self._get_moscow(entry.get("action", ""), entry.get("source_quote", ""))
+                self.categories[cat].append(formatted)
 
     def generate(self):
-        """Produit le fichier Excel multi-onglets."""
-        logger.info("📊 Préparation de l'export Excel...")
-
-        # Préparation des DataFrames
-        df_must = pd.DataFrame(self.must).drop(columns=["Texte Original"], errors='ignore')
-        df_should = pd.DataFrame(self.should).drop(columns=["Texte Original"], errors='ignore')
-        df_could = pd.DataFrame(self.could).drop(columns=["Texte Original"], errors='ignore')
-        df_rejected = pd.DataFrame(self.rejected_noise)
-
-        # Synthèse
-        summary_data = {
-            "Catégorie": ["MUST", "SHOULD", "COULD", "AUTRES / WON'T", "REJETÉS (BRUIT)"],
-            "Nombre": [len(self.must), len(self.should), len(self.could), len(self.other), len(self.rejected_noise)]
-        }
-        df_summary = pd.DataFrame(summary_data)
-
+        logger.info("🚀 Génération de la Matrice Haute Fidélité...")
+        
         with pd.ExcelWriter(OUTPUT_EXCEL, engine="openpyxl") as writer:
-            df_summary.to_excel(writer, sheet_name="Synthèse", index=False)
-            df_must.to_excel(writer, sheet_name="MUST", index=False)
-            df_should.to_excel(writer, sheet_name="SHOULD", index=False)
-            df_could.to_excel(writer, sheet_name="COULD", index=False)
-            df_rejected.to_excel(writer, sheet_name="Rejetés (Bruit)", index=False)
+            # Onglet Synthèse
+            summary = pd.DataFrame([
+                {"Catégorie": k, "Nombre": len(v)} for k, v in self.categories.items()
+            ] + [{"Catégorie": "REJETÉS", "Nombre": len(self.rejected_noise)}])
+            summary.to_excel(writer, sheet_name="Synthèse", index=False)
 
-            # Formatage via openpyxl
-            workbook = writer.book
-            for sheet_name in ["MUST", "SHOULD", "COULD", "Rejetés (Bruit)"]:
-                worksheet = workbook[sheet_name]
-                # Figer la ligne 1
-                worksheet.freeze_panes = "A2"
-                
-                # Ajustement des largeurs (basique)
-                for i, col in enumerate(worksheet.columns):
-                    max_length = 0
-                    column = col[0].column_letter
-                    for cell in col:
-                        try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(str(cell.value))
-                        except: pass
+            # Onglets MoSCoW
+            for cat, items in self.categories.items():
+                df = pd.DataFrame(items)
+                df.to_excel(writer, sheet_name=cat, index=False)
+
+            # Onglet Bruit
+            pd.DataFrame(self.rejected_noise).to_excel(writer, sheet_name="Rejetés (Audit)", index=False)
+
+            # Post-traitement visuel
+            self._apply_styling(writer)
+
+        logger.success(f"✨ Matrice v13 générée : {len(self.seen_hashes)} exigences uniques retenues.")
+
+    def _apply_styling(self, writer):
+        workbook = writer.book
+        header_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
+        header_font = Font(bold=True)
+
+        for sheet in workbook.sheetnames:
+            ws = workbook[sheet]
+            ws.freeze_panes = "A2"
+            
+            for cell in ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+
+            for i, col in enumerate(ws.columns):
+                col_letter = col[0].column_letter
+                if sheet != "Synthèse":
+                    width = 20
+                    if i == 4: width = 80 # Citation
+                    if i == 3: width = 40 # Objet
+                    ws.column_dimensions[col_letter].width = width
                     
-                    # Limites raisonnables
-                    adjusted_width = min(max_length + 2, 60)
-                    if sheet_name != "Rejetés (Bruit)" and i == 4: # Citation Source
-                        adjusted_width = 80
-                    worksheet.column_dimensions[column].width = adjusted_width
-                    
-                    # Wrap text pour les longues colonnes
-                    if adjusted_width >= 40:
-                        from openpyxl.styles import Alignment
+                    if width >= 40:
                         for cell in col:
-                            cell.alignment = Alignment(wrap_text=True, vertical='top')
-
-        logger.success(f"✅ Excel généré avec succès : {OUTPUT_EXCEL}")
-        logger.info(f"📈 MUST: {len(self.must)} | SHOULD: {len(self.should)} | COULD: {len(self.could)} | Rejetés: {len(self.rejected_noise)}")
+                            cell.alignment = Alignment(wrap_text=True, vertical="top")
 
 if __name__ == "__main__":
-    generator = ExcelGenerator(REGISTRY_PATH)
-    generator.load_and_filter()
-    generator.generate()
+    gen = ExcelGenerator(REGISTRY_PATH)
+    gen.load_and_process()
+    gen.generate()

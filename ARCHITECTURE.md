@@ -32,6 +32,11 @@ graph TD
         G & F & E -->|Certification| I{BASELINE}
         I --> J[📄 Rendu Markdown]
         I --> K[💾 Rendu JSON ALM]
+        I --> L[📊 Matrice Excel]
+    end
+
+    subgraph "INTERFACE : RAG"
+        C & G -->|Query| AGENT[🤖 RFPAgent]
     end
 ```
 
@@ -42,6 +47,7 @@ graph TD
 L'usine est optimisée pour le traitement industriel et la compréhension visuelle :
 
 - **Analyse Multimodale :** Le `LocalParser` extrait désormais les schémas et maquettes au format PNG. L'agent `VisionRequirementAgent` utilise des modèles comme Llama 3.2 Vision ou Gemini pour transformer ces images en spécifications textuelles avant leur normalisation BABOK.
+- **RAG Hybride (rfp_agent.py) :** Une interface conversationnelle permet d'interroger à la fois les fragments bruts (Phase 1) et les exigences auditées (Phase 2), avec un support multimodal complet pour les réponses contextuelles.
 - **Asynchronisme (asyncio) :** Toutes les phases de traitement LLM (Texte & Vision) sont asynchrones.
 - **Contrôle de Flux (Semaphore) :** Un sémaphore limite la concurrence pour protéger la VRAM lors des appels Vision plus gourmands.
 - **Auto-Switch Multi-LLM :** Bascule dynamique entre Ollama, Gemini et OpenRouter.
@@ -50,13 +56,17 @@ L'usine est optimisée pour le traitement industriel et la compréhension visuel
 
 ## 🎨 3. Certification & Produits de Sortie
 
-La Phase 3 génère deux artefacts certifiés :
+La Phase 3 génère trois artefacts certifiés :
 
 ### A. Le Livrable Humain (`technical_baseline_final.md`)
 Inclut désormais les exigences issues des schémas et les IDs officiels BN-XXX.
 
 ### B. Le Livrable Machine (`technical_baseline_alm.json`)
 Contient l'historique complet, incluant la trace du passage par l'Agent Vision.
+
+### C. La Matrice de Conformité (`Matrice_Conformite_RFP.xlsx`)
+Génère une vue tabulaire organisée par priorité MoSCoW, prête pour le chiffrage et l'import client.
+
 
 ---
 

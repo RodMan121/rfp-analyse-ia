@@ -37,8 +37,9 @@ Vous êtes le chef d'atelier. Voici vos 3 commandes :
     *(C'est ici que la magie opère : grâce à l'asynchronisme, plusieurs robots travaillent en parallèle pour traiter des centaines de pages en un temps record).*
 
 3.  **Emballer le produit final (La Baseline)** :
-    Vous générez la Technical Baseline (Markdown & JSON) :
+    Vous générez la Technical Baseline (Markdown & JSON) et la matrice Excel :
     `python extract/phase3/composer.py`
+    `python extract/phase3/excel_generator.py`
 
 ---
 

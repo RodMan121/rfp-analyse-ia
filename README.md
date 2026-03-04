@@ -10,14 +10,23 @@
 - **`data/input/*.pdf`** : Vos documents sources (RFP, CCTP, catalogues).
 
 ### 📤 Sorties (Produits Certifiés)
-Le système génère une **Technical Baseline** bi-format à la fin du processus :
+Le système génère une **Technical Baseline** complète à la fin du processus :
 1.  **`technical_baseline_final.md`** : Le livrable humain. Un catalogue élégant avec priorités MoSCoW et traçabilité FSM.
 2.  **`technical_baseline_alm.json`** : Le livrable machine. Prêt pour l'import dans vos outils ALM (Jira, DOORS).
-3.  **`granular_audit_report.md`** : Le rapport de "loups" sémantiques identifiés en Phase 2.
+3.  **`Matrice_Conformite_RFP.xlsx`** : La matrice de conformité Excel pour le chiffrage et le suivi client.
+4.  **`granular_audit_report.md`** : Le rapport de "loups" sémantiques identifiés en Phase 2.
 
 ---
 
-## 🚀 Guide d'Utilisation Automatisé (1-2-3)
+## 🤖 Agent Conversationnel (RAG)
+Pour interroger le document de manière interactive (Texte + Vision) :
+```bash
+python extract/rfp_agent.py "Quelles sont les exigences de sécurité ?"
+```
+
+---
+
+## 🚀 Guide d'Utilisation Automatisé (1-2-3-4)
 
 1.  **Dissocier (Phase 1)** : Ingestion et ancrage immuable avec contexte dynamique.
     ```bash
@@ -33,6 +42,10 @@ Le système génère une **Technical Baseline** bi-format à la fin du processus
 3.  **Associer (Phase 3 📦)** : Certification de la Baseline technique.
     ```bash
     ./venv/bin/python extract/phase3/composer.py
+    ```
+4.  **Matrice (Excel 📊)** : Génération de la matrice de conformité.
+    ```bash
+    ./venv/bin/python extract/phase3/excel_generator.py
     ```
 
 ---
