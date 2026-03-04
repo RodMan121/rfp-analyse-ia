@@ -26,13 +26,19 @@ python extract/rfp_agent.py "Quelles sont les exigences de sécurité ?"
 
 ---
 
-## 🚀 Guide d'Utilisation Automatisé (1-2-3-4)
+## 🚀 Guide d'Utilisation Automatisé (1-2-3-4-5)
 
-1.  **Dissocier (Phase 1)** : Ingestion et ancrage immuable avec contexte dynamique.
+0.  **Initialisation (Context 📝)** : Préparez le terrain pour votre document.
     ```bash
-    # Exemple avec contexte libre
-    ./venv/bin/python extract/main.py --input data/input/mon_rfp.pdf \
-      --context "RFP pour une application métier, exigences BN-XXX, schémas"
+    # Génère le template data/document_context.md
+    python extract/main.py --init-context
+    # Puis complétez data/document_context.md en texte libre (type d'ID, domaine, etc.)
+    ```
+
+1.  **Dissocier (Phase 1)** : Ingestion et ancrage immuable guidé par votre contexte.
+    ```bash
+    # Lit data/document_context.md automatiquement
+    python extract/main.py --input data/input/mon_rfp.pdf
     ```
 2.  **Traiter (Phase 2 ✨)** : Moissonnage industriel par les Micro-Agents.
     ```bash

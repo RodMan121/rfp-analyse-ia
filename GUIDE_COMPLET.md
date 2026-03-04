@@ -8,6 +8,7 @@ Ce guide explique comment utiliser les fichiers générés à la fin du cycle de
 
 ```text
 data/
+├── document_context.md          <-- CONFIGURATION (Seule source de vérité)
 ├── technical_baseline_final.md  <-- POUR LES HUMAINS (Lire & Valider)
 ├── Matrice_Conformite_RFP.xlsx  <-- MATRICE DE CONFORMITÉ (Format Client)
 ├── technical_baseline_alm.json  <-- POUR LES MACHINES (Importer & Tracer)
@@ -16,10 +17,17 @@ data/
 
 ---
 
-## 🚀 Le Workflow Industriel (3 Étapes)
+## 🚀 Le Workflow Industriel (4 Étapes)
+
+### 0. Initialisation (Nouveau ✨)
+Générez le template de contexte pour votre document.
+```bash
+python extract/main.py --init-context
+```
+Ouvrez `data/document_context.md` et remplissez-le en texte libre. C'est ici que vous définissez la nature du document, les identifiants (ex: BN-XXX), etc. C'est la **seule source de vérité** pour le guidage des agents.
 
 ### 1. Ingestion (Phase 1)
-Préparez la matière première.
+Préparez la matière première. L'usine lit automatiquement votre fichier `document_context.md`.
 ```bash
 python extract/main.py --input data/input/mon_rfp.pdf
 ```

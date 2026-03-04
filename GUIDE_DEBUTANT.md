@@ -27,16 +27,21 @@ L'usine récupère uniquement les paragraphes qui ont reçu un "Feu Vert" au deu
 
 Vous êtes le chef d'atelier. Voici vos 3 commandes :
 
-1.  **Démarrer les machines (Ingestion)** :
-    Vous mettez le PDF dans `data/input/` et vous lancez :
+1.  **Préparer le terrain (Initialisation)** :
+    Avant de découper le document, vous devez expliquer aux robots à quoi il ressemble.
+    `python extract/main.py --init-context`
+    Ouvrez le fichier `data/document_context.md` qui vient d'être créé et décrivez simplement votre document (ex: "C'est un RFP pour l'ESSP, les exigences sont de type BN-XXX"). C'est la seule source de vérité pour l'usine.
+
+2.  **Démarrer les machines (Ingestion)** :
+    Mettez votre PDF dans `data/input/` et lancez l'ingestion. Elle lira automatiquement vos instructions dans le fichier `.md`.
     `python extract/main.py --input data/input/mon_document.pdf`
 
-2.  **Lancer le tapis roulant (Le Moissonnage)** :
+3.  **Lancer le tapis roulant (Le Moissonnage)** :
     Vous dites aux robots d'inspecter l'intégralité des pièces :
     `python extract/requirement_harvester.py`
     *(C'est ici que la magie opère : grâce à l'asynchronisme, plusieurs robots travaillent en parallèle pour traiter des centaines de pages en un temps record).*
 
-3.  **Emballer le produit final (La Baseline)** :
+4.  **Emballer le produit final (La Baseline)** :
     Vous générez la Technical Baseline (Markdown & JSON) et la matrice Excel :
     `python extract/phase3/composer.py`
     `python extract/phase3/excel_generator.py`
